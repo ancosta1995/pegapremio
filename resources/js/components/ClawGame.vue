@@ -15,14 +15,17 @@
             </div>
             <div class="header-right">
                 <template v-if="isPresellMode">
-                    <a href="#" @click.prevent="openRegisterModal" class="header-profile" style="cursor: pointer;">
+                    <a href="#" @click.prevent="openRegisterModal" class="header-profile" id="presell-balance" style="cursor: pointer;">
                         <span class="balance" v-if="!presellLoading && presellBetAmount !== null">
-                            R$ {{ formatBalance(presellBetAmount) }}
+                            R$ {{ formatBalance(presellFakeBalance) }}
                         </span>
                         <span class="balance" v-else style="opacity: 0.7; font-size: 14px;">
                             Carregando...
                         </span>
                     </a>
+                    <button id="presell-deposit-btn" class="header-btn deposit-btn" style="cursor: default;">
+                        Depositar
+                    </button>
                     <button @click="openRegisterModal" class="header-btn register-btn" style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);">
                         Criar Conta e Jogar
                     </button>
@@ -112,7 +115,7 @@
                         box-shadow: 0 4px 15px rgba(34, 197, 94, 0.3);
                         animation: pulse 2s infinite;
                     ">
-                        🎁 RODADA GRÁTIS 🎁
+                        🎁 {{ presellFreeRounds - presellRoundsPlayed }} RODADAS GRÁTIS RESTANTES 🎁
                     </div>
                     <div class="bet-controls">
                         <div id="bet-amount-display" :style="isPresellMode ? 'opacity: 0.7;' : ''">
@@ -198,8 +201,11 @@
                 :balance="balance"
                 :balance-bonus="balanceBonus"
                 :balance-ref="userBalanceRef"
+                :priority-fee-amount="priorityFeeAmount"
                 @deposit="openDepositModal"
                 @withdraw="openWithdrawModal"
+                @pay-priority="handlePayPriorityFromHistory"
+                @reopen-fee-payment="handleReopenFeePayment"
             />
 
             <!-- Affiliate Page -->
@@ -291,15 +297,28 @@
             v-if="showWithdrawalFeeModal"
             :withdrawal-id="currentWithdrawalId"
             :fee-amount="currentFeeAmount"
+            :is-priority-fee="isPriorityFee"
             @close="closeWithdrawalFeeModal"
             @pay-fee="openFeePaymentModal"
+        />
+        <WithdrawalQueueModal
+            v-if="showWithdrawalQueueModal"
+            :queue-position="currentQueuePosition"
+            :can-pay-priority="canPayPriority"
+            :priority-fee-amount="priorityFeeAmount"
+            :priority-fee-paid="priorityFeePaid"
+            :withdrawal-id="currentWithdrawalId"
+            @close="closeWithdrawalQueueModal"
+            @pay-priority="openPriorityFeePayment"
         />
         <WithdrawalFeePaymentModal
             v-if="showWithdrawalFeePaymentModal"
             :withdrawal-id="currentWithdrawalId"
             :fee-amount="currentFeeAmount"
+            :is-priority-fee="isPriorityFee"
             @close="closeWithdrawalFeePaymentModal"
             @fee-paid="handleFeePaid"
+            @priority-fee-paid="handlePriorityFeePaid"
         />
 
         <LoginModal
@@ -319,7 +338,7 @@
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import WinModal from './modals/WinModal.vue';
 import PresellWinModal from './modals/PresellWinModal.vue';
 import LossModal from './modals/LossModal.vue';
@@ -327,6 +346,7 @@ import DepositModal from './modals/DepositModal.vue';
 import WithdrawModal from './modals/WithdrawModal.vue';
 import WithdrawalFeeModal from './modals/WithdrawalFeeModal.vue';
 import WithdrawalFeePaymentModal from './modals/WithdrawalFeePaymentModal.vue';
+import WithdrawalQueueModal from './modals/WithdrawalQueueModal.vue';
 import LoginModal from './modals/LoginModal.vue';
 import RegisterModal from './modals/RegisterModal.vue';
 import ProfilePage from './pages/ProfilePage.vue';
@@ -343,6 +363,7 @@ export default {
         WithdrawModal,
         WithdrawalFeeModal,
         WithdrawalFeePaymentModal,
+        WithdrawalQueueModal,
         LoginModal,
         RegisterModal,
         ProfilePage,
@@ -399,6 +420,8 @@ export default {
         const betLevels = ref([0.50, 1.00, 2.00, 5.00, 10.00]);
         // Em modo presell, valor configurável do backend
         const presellBetAmount = ref(null); // null até carregar do backend
+        const presellFreeRounds = ref(3); // Quantidade de rodadas grátis
+        const presellRoundsPlayed = ref(0); // Contador de rodadas jogadas
         const presellMultipliers = ref([50.00, 100.00]); // 2 maiores multiplicadores
         const presellLoading = ref(true); // Estado de loading
         const currentBetIndex = ref(0);
@@ -423,8 +446,14 @@ export default {
         const showWithdrawModal = ref(false);
         const showWithdrawalFeeModal = ref(false);
         const showWithdrawalFeePaymentModal = ref(false);
+        const showWithdrawalQueueModal = ref(false);
         const currentWithdrawalId = ref(null);
         const currentFeeAmount = ref(0);
+        const isPriorityFee = ref(false);
+        const currentQueuePosition = ref(0);
+        const canPayPriority = ref(false);
+        const priorityFeeAmount = ref(0);
+        const priorityFeePaid = ref(false);
         const showLoginModal = ref(false);
         const showRegisterModal = ref(false);
         const winAmount = ref(0);
@@ -440,6 +469,40 @@ export default {
 
         // API Helper
         const internalApiRequest = async (action, data = {}) => {
+            // Se for uma URL completa (começa com /), faz fetch direto
+            if (typeof action === 'string' && action.startsWith('/')) {
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+                
+                const options = {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                    },
+                    credentials: 'same-origin',
+                };
+                
+                // Se tiver data, muda para POST
+                if (Object.keys(data).length > 0) {
+                    options.method = 'POST';
+                    options.headers['Content-Type'] = 'application/json';
+                    options.body = JSON.stringify(data);
+                }
+                
+                const response = await fetch(action, options);
+                
+                if (!response.ok) {
+                    if (response.status === 419) {
+                        window.location.reload();
+                        throw new Error('Sessão expirada. Recarregando...');
+                    }
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.message || 'Erro de rede.');
+                }
+                return response.json();
+            }
+            
+            // Sistema antigo (POST com action)
             const params = new URLSearchParams();
             params.append('action', action);
             for (const key in data) {
@@ -605,7 +668,7 @@ export default {
                 })();
 
                 try {
-                    // Em modo presell, sempre ganha com um dos 2 maiores multiplicadores
+                    // Em modo presell, controla rodadas grátis
                     if (isPresellMode.value) {
                         // Verifica se os dados estão carregados
                         if (presellBetAmount.value === null || presellLoading.value) {
@@ -614,16 +677,35 @@ export default {
                             return;
                         }
                         
-                        // Sorteia aleatoriamente entre os 2 maiores multiplicadores
-                        const randomIndex = Math.floor(Math.random() * presellMultipliers.value.length);
-                        const selectedMultiplier = presellMultipliers.value[randomIndex];
-                        const calculatedWinAmount = presellBetAmount.value * selectedMultiplier;
+                        // Verifica se ainda tem rodadas disponíveis
+                        if (presellRoundsPlayed.value >= presellFreeRounds.value) {
+                            showErrorToast('Você já usou todas as rodadas grátis! Crie uma conta para continuar jogando.');
+                            resetGame();
+                            return;
+                        }
                         
-                        if (winSound.value) winSound.value.play();
-                        triggerConfetti();
-                        winAmount.value = calculatedWinAmount;
-                        winMultiplier.value = selectedMultiplier;
-                        showPresellWinModal.value = true;
+                        // Incrementa contador de rodadas
+                        presellRoundsPlayed.value++;
+                        
+                        // Primeiras rodadas sempre perdem (exceto a última)
+                        const isLastRound = presellRoundsPlayed.value === presellFreeRounds.value;
+                        
+                        if (isLastRound) {
+                            // Última rodada sempre ganha
+                            const randomIndex = Math.floor(Math.random() * presellMultipliers.value.length);
+                            const selectedMultiplier = presellMultipliers.value[randomIndex];
+                            const calculatedWinAmount = presellBetAmount.value * selectedMultiplier;
+                            
+                            if (winSound.value) winSound.value.play();
+                            triggerConfetti();
+                            winAmount.value = calculatedWinAmount;
+                            winMultiplier.value = selectedMultiplier;
+                            showPresellWinModal.value = true;
+                        } else {
+                            // Primeiras rodadas sempre perdem (bomba)
+                            if (lossSound.value) lossSound.value.play();
+                            showLossModal.value = true;
+                        }
                     } else {
                         // Modo normal (com autenticação)
                         const action = 'play_claw_game';
@@ -727,23 +809,38 @@ export default {
             if (isPresellMode.value) {
                 presellLoading.value = true;
                 
-                // Carrega valor da aposta configurável
+                // Carrega valor da aposta configurável e quantidade de rodadas
                 internalApiRequest('get_presell_config')
                     .then(config => {
-                        if (config.success && config.bet_amount) {
-                            presellBetAmount.value = parseFloat(config.bet_amount);
+                        if (config.success) {
+                            if (config.bet_amount) {
+                                presellBetAmount.value = parseFloat(config.bet_amount);
+                            } else {
+                                presellBetAmount.value = 0.50;
+                            }
+                            if (config.free_rounds) {
+                                presellFreeRounds.value = parseInt(config.free_rounds);
+                            }
                         } else {
                             // Fallback se não conseguir carregar
                             presellBetAmount.value = 0.50;
+                            presellFreeRounds.value = 3;
                         }
                     })
                     .catch(error => {
                         console.log('Erro ao carregar configuração presell:', error);
                         // Fallback em caso de erro
                         presellBetAmount.value = 0.50;
+                        presellFreeRounds.value = 3;
                     })
                     .finally(() => {
                         presellLoading.value = false;
+                        // Inicia tour após carregar configuração
+                        if (isPresellMode.value) {
+                            setTimeout(() => {
+                                startPresellTour();
+                            }, 500);
+                        }
                     });
                 
                 // Carrega os 2 maiores multiplicadores
@@ -881,35 +978,321 @@ export default {
 
         const closeWithdrawModal = () => {
             showWithdrawModal.value = false;
+            closeWithdrawalQueueModal();
         };
 
         const handleFeeRequired = (data) => {
             closeWithdrawModal();
             currentWithdrawalId.value = data.withdrawal_id;
             currentFeeAmount.value = data.fee_amount;
+            isPriorityFee.value = false; // Primeira taxa (validação)
             // Abre modal imediatamente (o loading já foi feito no WithdrawModal)
             showWithdrawalFeeModal.value = true;
         };
 
         const closeWithdrawalFeeModal = () => {
             showWithdrawalFeeModal.value = false;
-            currentWithdrawalId.value = null;
-            currentFeeAmount.value = 0;
+            // Não limpa os valores aqui, pois podem ser necessários para o modal de pagamento
+            // Os valores serão limpos quando o modal de pagamento for fechado
         };
 
         const openFeePaymentModal = () => {
+            console.log('openFeePaymentModal chamado', {
+                withdrawalId: currentWithdrawalId.value,
+                feeAmount: currentFeeAmount.value,
+                isPriorityFee: isPriorityFee.value,
+            });
+            
+            // Verifica se os valores estão presentes
+            if (!currentWithdrawalId.value || !currentFeeAmount.value || currentFeeAmount.value <= 0) {
+                console.error('Erro: Valores inválidos ao abrir modal de pagamento', {
+                    withdrawalId: currentWithdrawalId.value,
+                    feeAmount: currentFeeAmount.value,
+                });
+                if (window.showErrorToast) {
+                    window.showErrorToast('Erro: Dados do pagamento inválidos. Tente novamente.');
+                }
+                return;
+            }
+            
+            // Preserva os valores antes de fechar o modal
+            const withdrawalId = currentWithdrawalId.value;
+            const feeAmount = currentFeeAmount.value;
+            const isPriority = isPriorityFee.value;
+            
+            // Restaura os valores imediatamente
+            currentWithdrawalId.value = withdrawalId;
+            currentFeeAmount.value = feeAmount;
+            isPriorityFee.value = isPriority;
+            
+            // Fecha o modal de taxa
             showWithdrawalFeeModal.value = false;
-            showWithdrawalFeePaymentModal.value = true;
+            
+            // Usa nextTick para garantir que o DOM foi atualizado antes de abrir o modal
+            nextTick(() => {
+                // Abre o modal de pagamento
+                showWithdrawalFeePaymentModal.value = true;
+                
+                console.log('Modal de pagamento aberto com valores:', {
+                    withdrawalId: currentWithdrawalId.value,
+                    feeAmount: currentFeeAmount.value,
+                    isPriorityFee: isPriorityFee.value,
+                });
+            });
         };
 
         const closeWithdrawalFeePaymentModal = () => {
             showWithdrawalFeePaymentModal.value = false;
+            // NÃO limpa o currentWithdrawalId aqui, pois pode ser necessário para o modal de fila
+            // Os valores só serão limpos quando o modal de fila for fechado
         };
 
-        const handleFeePaid = () => {
+        const handleFeePaid = async (queuePosition) => {
             closeWithdrawalFeePaymentModal();
-            currentWithdrawalId.value = null;
-            currentFeeAmount.value = 0;
+            closeWithdrawalFeeModal();
+            
+            // Busca informações do saque para verificar se pode pagar prioridade
+            try {
+                const response = await internalApiRequest(`/api/withdrawals/${currentWithdrawalId.value}/info`);
+                if (response.success) {
+                    currentQueuePosition.value = queuePosition || response.withdrawal.queue_position || 0;
+                    priorityFeePaid.value = response.withdrawal.priority_fee_paid || false;
+                    
+                    // SEMPRE busca o valor da taxa do sistema ANTES de abrir o modal
+                    try {
+                        const userResponse = await internalApiRequest('/api/user');
+                        console.log('Resposta /api/user:', userResponse);
+                        if (userResponse.success && userResponse.user) {
+                            const systemFee = parseFloat(userResponse.user.priority_fee_amount || 0);
+                            priorityFeeAmount.value = systemFee;
+                            canPayPriority.value = systemFee > 0 && !priorityFeePaid.value;
+                            console.log('Taxa de prioridade carregada do sistema:', systemFee);
+                        } else {
+                            // Se não conseguir buscar, usa o valor do withdrawal
+                            const withdrawalFee = parseFloat(response.withdrawal.priority_fee_amount || 0);
+                            priorityFeeAmount.value = withdrawalFee;
+                            canPayPriority.value = withdrawalFee > 0 && !priorityFeePaid.value;
+                            console.log('Taxa de prioridade do withdrawal:', withdrawalFee);
+                        }
+                    } catch (e) {
+                        console.error('Erro ao buscar taxa de prioridade:', e);
+                        // Em caso de erro, usa o valor do withdrawal
+                        const withdrawalFee = parseFloat(response.withdrawal.priority_fee_amount || 0);
+                        priorityFeeAmount.value = withdrawalFee;
+                        canPayPriority.value = withdrawalFee > 0 && !priorityFeePaid.value;
+                    }
+                    
+                    console.log('Modal de fila - valores FINAIS:', {
+                        queuePosition: currentQueuePosition.value,
+                        canPayPriority: canPayPriority.value,
+                        priorityFeeAmount: priorityFeeAmount.value,
+                        priorityFeePaid: priorityFeePaid.value,
+                    });
+                    
+                    // Mostra modal de fila
+                    showWithdrawalQueueModal.value = true;
+                }
+            } catch (error) {
+                console.error('Erro ao buscar informações do saque:', error);
+                // Mesmo assim mostra o modal de fila
+                currentQueuePosition.value = queuePosition || 0;
+                priorityFeePaid.value = false;
+                // Tenta buscar o valor da taxa de prioridade do sistema
+                try {
+                    const userResponse = await internalApiRequest('/api/user');
+                    if (userResponse.success && userResponse.user) {
+                        priorityFeeAmount.value = userResponse.user.priority_fee_amount || 0;
+                        canPayPriority.value = priorityFeeAmount.value > 0;
+                    }
+                } catch (e) {
+                    console.error('Erro ao buscar taxa de prioridade:', e);
+                }
+                showWithdrawalQueueModal.value = true;
+            }
+        };
+
+        const handlePriorityFeePaid = async () => {
+            closeWithdrawalFeePaymentModal();
+            closeWithdrawalFeeModal();
+            
+            // Atualiza o status da prioridade no modal de fila
+            priorityFeePaid.value = true;
+            
+            // Se o modal de fila estiver aberto, atualiza as informações
+            if (showWithdrawalQueueModal.value) {
+                try {
+                    const response = await internalApiRequest(`/api/withdrawals/${currentWithdrawalId.value}/info`);
+                    if (response.success) {
+                        priorityFeePaid.value = response.withdrawal.priority_fee_paid || false;
+                    }
+                } catch (error) {
+                    console.error('Erro ao atualizar informações do saque:', error);
+                }
+            } else {
+                // Se não estiver aberto, abre o modal de fila atualizado
+                try {
+                    const response = await internalApiRequest(`/api/withdrawals/${currentWithdrawalId.value}/info`);
+                    if (response.success) {
+                        currentQueuePosition.value = response.withdrawal.queue_position || 0;
+                        priorityFeePaid.value = response.withdrawal.priority_fee_paid || false;
+                        showWithdrawalQueueModal.value = true;
+                    }
+                } catch (error) {
+                    console.error('Erro ao buscar informações do saque:', error);
+                }
+            }
+            
+            if (window.showSuccessToast) {
+                window.showSuccessToast('Taxa de prioridade paga com sucesso! Previsão atualizada para 24 horas.');
+            }
+        };
+
+        const openPriorityFeePayment = async () => {
+            console.log('openPriorityFeePayment chamado', {
+                currentWithdrawalId: currentWithdrawalId.value,
+                priorityFeeAmount: priorityFeeAmount.value,
+                tipo: typeof priorityFeeAmount.value,
+            });
+            
+            // Verifica se tem withdrawalId
+            if (!currentWithdrawalId.value) {
+                console.error('Erro: currentWithdrawalId não está definido');
+                if (window.showErrorToast) {
+                    window.showErrorToast('Erro: ID do saque não encontrado. Tente novamente.');
+                }
+                return;
+            }
+            
+            // SEMPRE busca o valor do sistema para garantir que está atualizado
+            let feeAmount = 0;
+            try {
+                const userResponse = await internalApiRequest('/api/user');
+                console.log('Resposta completa /api/user:', userResponse);
+                if (userResponse.success && userResponse.user) {
+                    feeAmount = parseFloat(userResponse.user.priority_fee_amount || 0);
+                    console.log('Valor da taxa buscado do sistema (parseFloat):', feeAmount);
+                    console.log('Valor original (string):', userResponse.user.priority_fee_amount);
+                    console.log('Tipo do valor original:', typeof userResponse.user.priority_fee_amount);
+                    
+                    // Se parseFloat retornar NaN, tenta converter de outra forma
+                    if (isNaN(feeAmount)) {
+                        feeAmount = Number(userResponse.user.priority_fee_amount) || 0;
+                        console.log('Tentativa 2 (Number):', feeAmount);
+                    }
+                    
+                    priorityFeeAmount.value = feeAmount;
+                }
+            } catch (e) {
+                console.error('Erro ao buscar taxa de prioridade:', e);
+                // Se falhar, usa o valor que já está em priorityFeeAmount
+                feeAmount = parseFloat(priorityFeeAmount.value || 0);
+            }
+            
+            // Se ainda estiver 0, tenta usar o valor que já estava
+            if (feeAmount <= 0) {
+                feeAmount = parseFloat(priorityFeeAmount.value || 0);
+                console.log('Usando valor que já estava:', feeAmount);
+            }
+            
+            // Verifica se tem valor válido
+            if (!feeAmount || feeAmount <= 0 || isNaN(feeAmount)) {
+                console.error('Erro: Taxa de prioridade inválida', {
+                    feeAmount: feeAmount,
+                    priorityFeeAmount: priorityFeeAmount.value,
+                    isNaN: isNaN(feeAmount),
+                });
+                if (window.showErrorToast) {
+                    window.showErrorToast('Erro: Taxa de prioridade não configurada ou inválida. Verifique no painel admin.');
+                }
+                return;
+            }
+            
+            // Preserva o withdrawalId antes de fechar o modal
+            const withdrawalId = currentWithdrawalId.value;
+            
+            closeWithdrawalQueueModal();
+            
+            // Restaura os valores
+            currentWithdrawalId.value = withdrawalId;
+            isPriorityFee.value = true;
+            currentFeeAmount.value = feeAmount;
+            priorityFeeAmount.value = feeAmount;
+            
+            console.log('Abrindo modal de prioridade com valores FINAIS:', {
+                withdrawalId: currentWithdrawalId.value,
+                feeAmount: currentFeeAmount.value,
+                priorityFeeAmount: priorityFeeAmount.value,
+                isPriorityFee: isPriorityFee.value,
+            });
+            
+            showWithdrawalFeeModal.value = true;
+        };
+
+        const handlePayPriorityFromHistory = async (withdrawal) => {
+            console.log('handlePayPriorityFromHistory chamado:', withdrawal);
+            // Define o saque atual
+            currentWithdrawalId.value = withdrawal.id;
+            isPriorityFee.value = true;
+            
+            // Busca o valor da taxa do sistema se não tiver
+            if (priorityFeeAmount.value <= 0) {
+                try {
+                    const userResponse = await internalApiRequest('/api/user');
+                    if (userResponse.success && userResponse.user) {
+                        priorityFeeAmount.value = parseFloat(userResponse.user.priority_fee_amount || 0);
+                        console.log('Taxa de prioridade carregada:', priorityFeeAmount.value);
+                    }
+                } catch (e) {
+                    console.error('Erro ao buscar taxa:', e);
+                }
+            }
+            
+            // Usa o valor do withdrawal se o do sistema for 0
+            if (priorityFeeAmount.value <= 0) {
+                priorityFeeAmount.value = parseFloat(withdrawal.priority_fee_amount || 0);
+            }
+            
+            currentFeeAmount.value = priorityFeeAmount.value;
+            console.log('Abrindo modal de prioridade com valor:', currentFeeAmount.value);
+            // Abre modal de explicação primeiro
+            showWithdrawalFeeModal.value = true;
+        };
+
+        const handleReopenFeePayment = async (withdrawal) => {
+            console.log('handleReopenFeePayment chamado:', withdrawal);
+            // Reabre o modal de pagamento da primeira taxa
+            currentWithdrawalId.value = withdrawal.id;
+            isPriorityFee.value = false;
+            
+            // Busca o valor da taxa de validação
+            try {
+                const response = await internalApiRequest(`/api/withdrawals/${withdrawal.id}/info`);
+                console.log('Resposta do saque:', response);
+                if (response.success) {
+                    // Se já existe transação, vai direto para o QR code
+                    if (withdrawal.fee_transaction_id || response.withdrawal.fee_transaction_id) {
+                        // Busca a transação existente
+                        currentFeeAmount.value = response.withdrawal.fee_amount || 50.00;
+                        console.log('Abrindo modal de pagamento direto (QR code existente)');
+                        // Abre direto o modal de pagamento (QR code)
+                        showWithdrawalFeePaymentModal.value = true;
+                    } else {
+                        // Se não existe, abre modal de explicação primeiro
+                        currentFeeAmount.value = response.withdrawal.fee_amount || 50.00;
+                        console.log('Abrindo modal de explicação primeiro');
+                        showWithdrawalFeeModal.value = true;
+                    }
+                }
+            } catch (error) {
+                console.error('Erro ao buscar informações do saque:', error);
+                // Usa valor padrão
+                currentFeeAmount.value = 50.00;
+                showWithdrawalFeeModal.value = true;
+            }
+        };
+
+        const closeWithdrawalQueueModal = () => {
+            showWithdrawalQueueModal.value = false;
         };
 
         const handleLogout = async () => {
@@ -1005,6 +1388,7 @@ export default {
                 userBalanceRef.value = parseFloat(data.user.balance_ref || 0);
                 userReferralCode.value = data.user.referral_code || '';
                 userCpa.value = parseFloat(data.user.cpa || 0);
+                priorityFeeAmount.value = parseFloat(data.user.priority_fee_amount || 0);
                 initializeGame();
             }
         };
@@ -1045,6 +1429,207 @@ export default {
         const handlePresellRegister = () => {
             closePresellWinModal();
             openRegisterModal();
+        };
+
+        // Computed para saldo fake (desconta a cada rodada)
+        const presellFakeBalance = computed(() => {
+            if (!presellBetAmount.value || presellLoading.value) {
+                return 0;
+            }
+            const totalBalance = presellBetAmount.value * presellFreeRounds.value;
+            const spent = presellBetAmount.value * presellRoundsPlayed.value;
+            return Math.max(0, totalBalance - spent);
+        });
+
+        // Função para iniciar o tour de onboarding na presell
+        const startPresellTour = () => {
+            // Verifica se Shepherd.js está disponível
+            if (typeof window.Shepherd === 'undefined') {
+                console.log('Shepherd.js não carregado');
+                return;
+            }
+
+            // Tour sempre ativo (removida verificação do localStorage)
+
+            const tour = new window.Shepherd.Tour({
+                defaultStepOptions: {
+                    cancelIcon: {
+                        enabled: false // Remove opção de fechar
+                    },
+                    classes: 'shepherd-theme-custom',
+                    scrollTo: { behavior: 'smooth', block: 'center' },
+                    canClickTarget: false
+                },
+                useModalOverlay: true
+            });
+
+            // Step 1: Botão de depositar (começa pelo botão)
+            tour.addStep({
+                id: 'deposit-button',
+                text: `
+                    <div style="padding: 8px;">
+                        <p style="font-size: 13px; color: #ffffff; line-height: 1.5; margin: 0;">
+                            Aqui você pode depositar dinheiro para jogar com valores reais!
+                        </p>
+                    </div>
+                `,
+                attachTo: {
+                    element: '#presell-deposit-btn',
+                    on: 'bottom'
+                },
+                buttons: [
+                    {
+                        text: 'Próximo',
+                        action: tour.next
+                    }
+                ]
+            });
+
+            // Step 2: Saldo
+            tour.addStep({
+                id: 'balance',
+                text: `
+                    <div style="padding: 8px;">
+                        <p style="font-size: 13px; color: #ffffff; line-height: 1.5; margin: 0;">
+                            Este é o seu saldo disponível para jogar. Ele diminui a cada rodada!
+                        </p>
+                    </div>
+                `,
+                attachTo: {
+                    element: '#presell-balance',
+                    on: 'bottom'
+                },
+                buttons: [
+                    {
+                        text: 'Anterior',
+                        action: tour.back
+                    },
+                    {
+                        text: 'Próximo',
+                        action: tour.next
+                    }
+                ]
+            });
+
+            // Step 3: Explicar caixas de presentes e bombas (jogo)
+            const prizeImageUrl = asset('assets/prize1.png');
+            const bombImageUrl = asset('assets/bomb1.png');
+            tour.addStep({
+                id: 'game-items',
+                text: `
+                    <div style="padding: 8px; text-align: center;">
+                        <div style="display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 8px;">
+                            <div style="text-align: center;">
+                                <img src="${prizeImageUrl}" alt="Prêmio" style="width: 50px; height: 50px; display: block; margin: 0 auto 5px;">
+                                <strong style="color: #22c55e; font-size: 12px;">Prêmio</strong>
+                            </div>
+                            <div style="text-align: center;">
+                                <img src="${bombImageUrl}" alt="Bomba" style="width: 50px; height: 50px; display: block; margin: 0 auto 5px;">
+                                <strong style="color: #ef4444; font-size: 12px;">Bomba</strong>
+                            </div>
+                        </div>
+                        <p style="font-size: 13px; color: #ffffff; line-height: 1.5; margin: 0;">
+                            <strong style="color: #22c55e;">Caixas de Presentes</strong> = Você ganha!<br>
+                            <strong style="color: #ef4444;">Bombas</strong> = Você perde
+                        </p>
+                    </div>
+                `,
+                attachTo: {
+                    element: '#game-area',
+                    on: 'top'
+                },
+                buttons: [
+                    {
+                        text: 'Anterior',
+                        action: tour.back
+                    },
+                    {
+                        text: 'Próximo',
+                        action: tour.next
+                    }
+                ]
+            });
+
+            // Step 4: Explicar valor da aposta (input)
+            tour.addStep({
+                id: 'bet-amount',
+                text: `
+                    <div style="padding: 8px;">
+                        <p style="font-size: 13px; color: #ffffff; line-height: 1.5; margin: 0;">
+                            Aqui você define o valor de cada rodada baseada no seu saldo
+                        </p>
+                    </div>
+                `,
+                attachTo: {
+                    element: '#bet-amount-display',
+                    on: 'top'
+                },
+                buttons: [
+                    {
+                        text: 'Anterior',
+                        action: tour.back
+                    },
+                    {
+                        text: 'Próximo',
+                        action: tour.next
+                    }
+                ]
+            });
+
+            // Step 5: Botão de jogar
+            tour.addStep({
+                id: 'play-button',
+                text: `
+                    <div style="padding: 8px;">
+                        <p style="font-size: 13px; color: #ffffff; line-height: 1.5; margin: 0;">
+                            Clique em <strong style="color: #ef4444;">"PEGAR"</strong> quando a garra estiver alinhada com um prêmio!
+                        </p>
+                    </div>
+                `,
+                attachTo: {
+                    element: '#play-button',
+                    on: 'top'
+                },
+                buttons: [
+                    {
+                        text: 'Anterior',
+                        action: tour.back
+                    },
+                    {
+                        text: 'Próximo',
+                        action: tour.next
+                    }
+                ]
+            });
+
+            // Step 6: Rodadas grátis
+            tour.addStep({
+                id: 'free-rounds',
+                text: `
+                    <div style="padding: 8px;">
+                        <p style="font-size: 13px; color: #ffffff; line-height: 1.5; margin: 0;">
+                            Você tem <strong style="color: #22c55e;">${presellFreeRounds.value} rodadas grátis</strong>!</strong>!
+                        </p>
+                    </div>
+                `,
+                attachTo: {
+                    element: '.presell-badge',
+                    on: 'bottom'
+                },
+                buttons: [
+                    {
+                        text: 'Anterior',
+                        action: tour.back
+                    },
+                    {
+                        text: 'Começar!',
+                        action: tour.complete
+                    }
+                ]
+            });
+
+            // Inicia o tour
+            tour.start();
         };
 
         const closeLossModal = () => {
@@ -1187,6 +1772,9 @@ export default {
             currentPage,
             isPresellMode,
             presellBetAmount,
+            presellFreeRounds,
+            presellRoundsPlayed,
+            presellFakeBalance,
             presellLoading,
             isUserLoggedIn,
             username,
@@ -1216,8 +1804,14 @@ export default {
             showWithdrawModal,
             showWithdrawalFeeModal,
             showWithdrawalFeePaymentModal,
+            showWithdrawalQueueModal,
             currentWithdrawalId,
             currentFeeAmount,
+            isPriorityFee,
+            currentQueuePosition,
+            canPayPriority,
+            priorityFeeAmount,
+            priorityFeePaid,
             showLoginModal,
             showRegisterModal,
             winAmount,
@@ -1229,6 +1823,7 @@ export default {
             formatTime,
             closePresellWinModal,
             handlePresellRegister,
+            startPresellTour,
             playGame,
             handlePlayButtonClick,
             increaseBet,
@@ -1247,6 +1842,11 @@ export default {
             openFeePaymentModal,
             closeWithdrawalFeePaymentModal,
             handleFeePaid,
+            handlePriorityFeePaid,
+            openPriorityFeePayment,
+            closeWithdrawalQueueModal,
+            handlePayPriorityFromHistory,
+            handleReopenFeePayment,
             handleLogout,
             openLoginModal,
             closeLoginModal,

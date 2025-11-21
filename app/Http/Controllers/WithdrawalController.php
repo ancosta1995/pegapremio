@@ -156,6 +156,7 @@ class WithdrawalController extends Controller
     {
         $user = Auth::user();
         $status = $request->query('status');
+        $priorityFee = SystemSetting::get('withdrawal_priority_fee', 0.00);
 
         $query = Withdrawal::where('user_id', $user->id)
             ->orderBy('created_at', 'desc');
@@ -166,9 +167,31 @@ class WithdrawalController extends Controller
 
         $withdrawals = $query->paginate(20);
 
+        // Adiciona informações de prioridade para cada saque
+        $withdrawalsData = collect($withdrawals->items())->map(function ($withdrawal) use ($priorityFee) {
+            $canPayPriority = $withdrawal->fee_paid && !$withdrawal->priority_fee_paid && $priorityFee > 0;
+            
+            return [
+                'id' => $withdrawal->id,
+                'amount' => $withdrawal->amount,
+                'pix_key_type' => $withdrawal->pix_key_type,
+                'pix_key' => $withdrawal->pix_key,
+                'status' => $withdrawal->status,
+                'fee_paid' => $withdrawal->fee_paid,
+                'fee_transaction_id' => $withdrawal->fee_transaction_id,
+                'priority_fee_paid' => $withdrawal->priority_fee_paid,
+                'priority_fee_transaction_id' => $withdrawal->priority_fee_transaction_id,
+                'queue_position' => $withdrawal->queue_position,
+                'priority_fee_amount' => $priorityFee,
+                'can_pay_priority' => $canPayPriority,
+                'created_at' => $withdrawal->created_at,
+                'updated_at' => $withdrawal->updated_at,
+            ];
+        });
+
         return response()->json([
             'success' => true,
-            'withdrawals' => $withdrawals->items(),
+            'withdrawals' => $withdrawalsData,
             'pagination' => [
                 'current_page' => $withdrawals->currentPage(),
                 'last_page' => $withdrawals->lastPage(),
@@ -208,7 +231,7 @@ class WithdrawalController extends Controller
     }
 
     /**
-     * Cria pagamento da taxa de saque
+     * Cria pagamento da taxa de saque (primeira taxa - validação)
      */
     public function createFeePayment(Request $request)
     {
@@ -237,20 +260,33 @@ class WithdrawalController extends Controller
                 ], 400);
             }
 
-            // Cria transação de pagamento da taxa
-            $gateway = new SeedpayGateway();
-            $paymentService = new PaymentService($gateway);
-            
-            $transaction = $paymentService->createTransaction(
-                $user,
-                (float) $request->fee_amount,
-                'PIX',
-                true // isWithdrawalFee = true
-            );
+            // Verifica se já existe uma transação pendente para esta taxa
+            $existingTransaction = null;
+            if ($withdrawal->fee_transaction_id) {
+                $existingTransaction = PaymentTransaction::find($withdrawal->fee_transaction_id);
+                if ($existingTransaction && $existingTransaction->status === 'pending') {
+                    // Usa a transação existente
+                    $transaction = $existingTransaction;
+                }
+            }
 
-            // Atualiza o saque com o ID da transação da taxa
-            $withdrawal->fee_transaction_id = $transaction->id;
-            $withdrawal->save();
+            // Se não existe transação pendente, cria uma nova
+            if (!$existingTransaction || $existingTransaction->status !== 'pending') {
+                $gateway = new SeedpayGateway();
+                $paymentService = new PaymentService($gateway);
+                
+                $transaction = $paymentService->createTransaction(
+                    $user,
+                    (float) $request->fee_amount,
+                    'PIX',
+                    true, // isWithdrawalFee = true
+                    'withdrawal_fee' // Tipo: taxa de saque (validação)
+                );
+
+                // Atualiza o saque com o ID da transação da taxa
+                $withdrawal->fee_transaction_id = $transaction->id;
+                $withdrawal->save();
+            }
 
             // Retorna QR code
             return response()->json([
@@ -276,7 +312,143 @@ class WithdrawalController extends Controller
     }
 
     /**
-     * Verifica status do pagamento da taxa
+     * Cria pagamento da taxa de prioridade de saque
+     */
+    public function createPriorityFeePayment(Request $request)
+    {
+        $request->validate([
+            'withdrawal_id' => 'required|exists:withdrawals,id',
+            'fee_amount' => 'required|numeric|min:0.01',
+        ]);
+
+        try {
+            $user = Auth::user();
+            $withdrawal = Withdrawal::findOrFail($request->withdrawal_id);
+
+            // Verifica se o saque pertence ao usuário
+            if ($withdrawal->user_id !== $user->id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Saque não encontrado.',
+                ], 404);
+            }
+
+            // Verifica se a primeira taxa já foi paga
+            if (!$withdrawal->fee_paid) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Você precisa pagar a taxa de validação primeiro.',
+                ], 400);
+            }
+
+            // Verifica se a taxa de prioridade já foi paga
+            if ($withdrawal->priority_fee_paid) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Taxa de prioridade já foi paga.',
+                ], 400);
+            }
+
+            // Verifica se já existe uma transação pendente para esta taxa de prioridade
+            $existingTransaction = null;
+            if ($withdrawal->priority_fee_transaction_id) {
+                $existingTransaction = PaymentTransaction::find($withdrawal->priority_fee_transaction_id);
+                if ($existingTransaction && $existingTransaction->status === 'pending') {
+                    // Usa a transação existente
+                    $transaction = $existingTransaction;
+                }
+            }
+
+            // Se não existe transação pendente, cria uma nova
+            if (!$existingTransaction || $existingTransaction->status !== 'pending') {
+                $gateway = new SeedpayGateway();
+                $paymentService = new PaymentService($gateway);
+                
+                $transaction = $paymentService->createTransaction(
+                    $user,
+                    (float) $request->fee_amount,
+                    'PIX',
+                    true, // isWithdrawalFee = true
+                    'withdrawal_priority_fee' // Tipo: taxa de prioridade de saque
+                );
+
+                // Atualiza o saque com o ID da transação da taxa de prioridade
+                $withdrawal->priority_fee_transaction_id = $transaction->id;
+                $withdrawal->save();
+            }
+
+            // Retorna QR code
+            return response()->json([
+                'success' => true,
+                'qr_code_url' => $transaction->qr_code,
+                'qr_code' => $transaction->qr_code,
+                'pix_code' => $transaction->qr_code_text,
+                'transaction_id' => $transaction->id,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('WithdrawalController createPriorityFeePayment error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'user_id' => Auth::id(),
+                'request' => $request->all(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao gerar pagamento da taxa de prioridade: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Obtém informações detalhadas do saque (incluindo posição na fila)
+     */
+    public function getWithdrawalInfo($id)
+    {
+        try {
+            $user = Auth::user();
+            $withdrawal = Withdrawal::findOrFail($id);
+
+            // Verifica se o saque pertence ao usuário
+            if ($withdrawal->user_id !== $user->id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Saque não encontrado.',
+                ], 404);
+            }
+
+            $priorityFee = SystemSetting::get('withdrawal_priority_fee', 0.00);
+            $canPayPriority = $withdrawal->fee_paid && !$withdrawal->priority_fee_paid && $priorityFee > 0;
+
+            return response()->json([
+                'success' => true,
+                'withdrawal' => [
+                    'id' => $withdrawal->id,
+                    'amount' => $withdrawal->amount,
+                    'status' => $withdrawal->status,
+                    'fee_paid' => $withdrawal->fee_paid,
+                    'priority_fee_paid' => $withdrawal->priority_fee_paid,
+                    'queue_position' => $withdrawal->queue_position,
+                    'can_pay_priority' => $canPayPriority,
+                    'priority_fee_amount' => $priorityFee,
+                    'created_at' => $withdrawal->created_at,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('WithdrawalController getWithdrawalInfo error', [
+                'error' => $e->getMessage(),
+                'withdrawal_id' => $id,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao obter informações do saque.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Verifica status do pagamento da taxa (primeira taxa)
      */
     public function getFeeStatus($id)
     {
@@ -295,7 +467,9 @@ class WithdrawalController extends Controller
             return response()->json([
                 'success' => true,
                 'fee_paid' => $withdrawal->fee_paid,
+                'priority_fee_paid' => $withdrawal->priority_fee_paid,
                 'withdrawal_status' => $withdrawal->status,
+                'queue_position' => $withdrawal->queue_position,
             ]);
         } catch (\Exception $e) {
             Log::error('WithdrawalController getFeeStatus error', [

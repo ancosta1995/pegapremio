@@ -6,15 +6,54 @@
                 <button class="modal-close" @click="closeModal">&times;</button>
             </div>
             <div class="modal-body">
-                <div v-if="rolloverInfo" class="rollover-info" :class="{ 'rollover-complete': rolloverInfo.progress >= 1, 'rollover-incomplete': rolloverInfo.progress < 1 }">
-                    <div v-if="rolloverInfo.progress < 1" class="rollover-warning">
-                        <strong>⚠️ Rollover não completado</strong>
-                        <p>Você precisa apostar R$ {{ formatCurrency(rolloverInfo.required) }} para poder sacar.</p>
-                        <p>Você já apostou R$ {{ formatCurrency(rolloverInfo.current) }} ({{ Math.round(rolloverInfo.progress * 100) }}%)</p>
+                <div v-if="rolloverInfo" class="rollover-card" :class="{ 'rollover-complete': rolloverInfo.progress >= 1, 'rollover-incomplete': rolloverInfo.progress < 1 }">
+                    <div v-if="rolloverInfo.progress < 1" class="rollover-content">
+                        <div class="rollover-header">
+                            <div class="rollover-icon warning">⚠️</div>
+                            <div class="rollover-title">
+                                <h4>Rollover não completado</h4>
+                                <p class="rollover-subtitle">Complete o rollover para realizar saques</p>
+                            </div>
+                        </div>
+                        <div class="rollover-progress-container">
+                            <div class="rollover-progress-bar">
+                                <div 
+                                    class="rollover-progress-fill" 
+                                    :style="{ width: Math.min(rolloverInfo.progress * 100, 100) + '%' }"
+                                ></div>
+                            </div>
+                            <div class="rollover-progress-text">
+                                <span>{{ Math.round(rolloverInfo.progress * 100) }}%</span>
+                            </div>
+                        </div>
+                        <div class="rollover-stats">
+                            <div class="rollover-stat-item">
+                                <span class="stat-label">Apostado</span>
+                                <span class="stat-value">R$ {{ formatCurrency(rolloverInfo.current) }}</span>
+                            </div>
+                            <div class="rollover-stat-divider"></div>
+                            <div class="rollover-stat-item">
+                                <span class="stat-label">Necessário</span>
+                                <span class="stat-value required">R$ {{ formatCurrency(rolloverInfo.required) }}</span>
+                            </div>
+                        </div>
                     </div>
-                    <div v-else class="rollover-success">
-                        <strong>✅ Rollover completo!</strong>
-                        <p>Você pode realizar saques.</p>
+                    <div v-else class="rollover-content success">
+                        <div class="rollover-header">
+                            <div class="rollover-icon success">✅</div>
+                            <div class="rollover-title">
+                                <h4>Rollover completo!</h4>
+                                <p class="rollover-subtitle">Você pode realizar saques agora</p>
+                            </div>
+                        </div>
+                        <div class="rollover-progress-container">
+                            <div class="rollover-progress-bar complete">
+                                <div class="rollover-progress-fill complete" style="width: 100%"></div>
+                            </div>
+                            <div class="rollover-progress-text">
+                                <span>100%</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -270,33 +309,147 @@ export default {
 </script>
 
 <style scoped>
-.rollover-info {
-    padding: 15px;
+.rollover-card {
+    background: linear-gradient(135deg, var(--cor-fundo-painel) 0%, #252525 100%);
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.rollover-card.rollover-complete {
+    border-color: #22c55e;
+    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.2);
+}
+
+.rollover-card.rollover-incomplete {
+    border-color: #f59e0b;
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);
+}
+
+.rollover-content {
+    width: 100%;
+}
+
+.rollover-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.rollover-icon {
+    font-size: 20px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border-radius: 8px;
-    margin-bottom: 20px;
+    flex-shrink: 0;
 }
 
-.rollover-warning {
-    background-color: #fef3c7;
-    border: 1px solid #fbbf24;
-    color: #92400e;
+.rollover-icon.warning {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
 }
 
-.rollover-success {
-    background-color: #d1fae5;
-    border: 1px solid #10b981;
-    color: #065f46;
+.rollover-icon.success {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
 }
 
-.rollover-info strong {
-    display: block;
-    margin-bottom: 8px;
+.rollover-title {
+    flex: 1;
+}
+
+.rollover-title h4 {
+    margin: 0 0 2px 0;
     font-size: 14px;
+    font-weight: 700;
+    color: var(--cor-texto);
 }
 
-.rollover-info p {
-    margin: 4px 0;
-    font-size: 13px;
+.rollover-subtitle {
+    margin: 0;
+    font-size: 12px;
+    color: var(--cor-texto-secundaria);
+}
+
+.rollover-progress-container {
+    margin-bottom: 10px;
+}
+
+.rollover-progress-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--cor-fundo-input);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    margin-bottom: 6px;
+}
+
+.rollover-progress-bar.complete {
+    background: rgba(34, 197, 94, 0.2);
+}
+
+.rollover-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+    border-radius: 8px;
+    transition: width 0.5s ease;
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+}
+
+.rollover-progress-fill.complete {
+    background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
+}
+
+.rollover-progress-text {
+    text-align: right;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--cor-texto-secundaria);
+}
+
+.rollover-stats {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #333;
+}
+
+.rollover-stat-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.stat-label {
+    font-size: 11px;
+    color: var(--cor-texto-secundaria);
+    font-weight: 500;
+}
+
+.stat-value {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--cor-texto);
+}
+
+.stat-value.required {
+    color: #f59e0b;
+}
+
+.rollover-stat-divider {
+    width: 1px;
+    height: 32px;
+    background: #333;
 }
 
 .form-help {

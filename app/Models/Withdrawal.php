@@ -25,6 +25,9 @@ class Withdrawal extends Model
         'rollover_progress_at_time',
         'fee_paid',
         'fee_transaction_id',
+        'priority_fee_paid',
+        'priority_fee_transaction_id',
+        'queue_position',
     ];
 
     protected function casts(): array

@@ -19,7 +19,7 @@ class PaymentService
     /**
      * Cria uma nova transação de pagamento
      */
-    public function createTransaction(User $user, float $amount, string $paymentMethod = 'PIX', bool $isWithdrawalFee = false): PaymentTransaction
+    public function createTransaction(User $user, float $amount, string $paymentMethod = 'PIX', bool $isWithdrawalFee = false, string $transactionType = 'deposit'): PaymentTransaction
     {
         // Se for taxa de saque, não valida valor mínimo de depósito
         if (!$isWithdrawalFee) {
@@ -37,6 +37,7 @@ class PaymentService
                 'gateway' => $this->gateway->getName(),
                 'amount' => $amount,
                 'payment_method' => $paymentMethod,
+                'transaction_type' => $transactionType,
                 'status' => 'pending',
             ]);
         } catch (\Illuminate\Database\QueryException $e) {
@@ -167,11 +168,11 @@ class PaymentService
     {
         $user = $transaction->user;
         
-        // Verifica se é pagamento de taxa de saque
+        // Verifica se é pagamento de taxa de saque (primeira taxa - validação)
         $withdrawal = \App\Models\Withdrawal::where('fee_transaction_id', $transaction->id)->first();
         
         if ($withdrawal) {
-            // É pagamento de taxa de saque - marca como pago e debita o saldo do saque
+            // É pagamento da primeira taxa de saque - marca como pago e debita o saldo do saque
             $withdrawal->fee_paid = true;
             
             // Agora debita o saldo do saque (já que a taxa foi paga)
@@ -193,9 +194,15 @@ class PaymentService
             $user->balance -= $withdrawal->amount;
             $user->save();
             
-            // Atualiza o saque com o saldo após
+            // Calcula posição na fila (simula uma fila baseada em quantos saques estão pendentes)
+            $queuePosition = \App\Models\Withdrawal::where('status', 'pending')
+                ->where('id', '!=', $withdrawal->id)
+                ->count() + 1;
+            
+            // Atualiza o saque com o saldo após e posição na fila
             $withdrawal->balance_after = (float) $user->balance;
             $withdrawal->status = 'pending'; // Muda de pending_fee para pending (aguardando análise)
+            $withdrawal->queue_position = $queuePosition;
             $withdrawal->save();
             
             Log::info('Taxa de saque paga e saque debitado', [
@@ -205,6 +212,22 @@ class PaymentService
                 'withdrawal_amount' => $withdrawal->amount,
                 'balance_before' => $balanceBefore,
                 'balance_after' => $user->balance,
+            ]);
+            
+            return; // Não processa como depósito normal
+        }
+        
+        // Verifica se é pagamento de taxa de prioridade
+        $withdrawalPriority = \App\Models\Withdrawal::where('priority_fee_transaction_id', $transaction->id)->first();
+        
+        if ($withdrawalPriority) {
+            // É pagamento de taxa de prioridade - apenas marca como pago
+            $withdrawalPriority->priority_fee_paid = true;
+            $withdrawalPriority->save();
+            
+            Log::info('Taxa de prioridade de saque paga', [
+                'withdrawal_id' => $withdrawalPriority->id,
+                'user_id' => $withdrawalPriority->user_id,
             ]);
             
             return; // Não processa como depósito normal

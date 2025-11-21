@@ -15,6 +15,7 @@ class PaymentTransaction extends Model
         'gateway_transaction_id',
         'amount',
         'payment_method',
+        'transaction_type',
         'status',
         'payment_url',
         'qr_code',

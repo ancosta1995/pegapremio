@@ -107,6 +107,22 @@ class PaymentTransactionResource extends Resource
                         'BOLETO' => 'info',
                         default => 'gray',
                     }),
+                Tables\Columns\TextColumn::make('transaction_type')
+                    ->label('Tipo')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'deposit' => 'success',
+                        'withdrawal_fee' => 'warning',
+                        'withdrawal_priority_fee' => 'danger',
+                        default => 'gray',
+                    })
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'deposit' => 'Depósito',
+                        'withdrawal_fee' => 'Taxa de Saque',
+                        'withdrawal_priority_fee' => 'Taxa de Prioridade',
+                        default => $state,
+                    })
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('status')
                     ->label('Status')
                     ->badge()
@@ -158,6 +174,13 @@ class PaymentTransactionResource extends Resource
                     ->label('Gateway')
                     ->options([
                         'Seedpay' => 'Seedpay',
+                    ]),
+                Tables\Filters\SelectFilter::make('transaction_type')
+                    ->label('Tipo de Transação')
+                    ->options([
+                        'deposit' => 'Depósito',
+                        'withdrawal_fee' => 'Taxa de Saque',
+                        'withdrawal_priority_fee' => 'Taxa de Prioridade',
                     ]),
             ])
             ->actions([

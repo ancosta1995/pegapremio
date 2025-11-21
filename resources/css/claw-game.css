@@ -825,6 +825,89 @@ body, html {
     }
 }
 
+/* Shepherd.js Custom Theme - Cores do site */
+.shepherd-theme-custom {
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    max-width: 280px;
+}
+
+.shepherd-theme-custom .shepherd-content {
+    border-radius: 8px;
+    padding: 0;
+    background: var(--cor-fundo-painel);
+    border: 1px solid #333;
+}
+
+.shepherd-theme-custom .shepherd-header {
+    background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+    padding: 8px 12px;
+    border-radius: 8px 8px 0 0;
+    display: none; /* Remove header para deixar mais compacto */
+}
+
+.shepherd-theme-custom .shepherd-title {
+    color: white;
+    font-weight: 700;
+    font-size: 14px;
+    margin: 0;
+}
+
+.shepherd-theme-custom .shepherd-text {
+    color: #ffffff;
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 0;
+    margin: 0;
+}
+
+.shepherd-theme-custom .shepherd-footer {
+    padding: 8px 12px;
+    border-radius: 0 0 8px 8px;
+    background: var(--cor-fundo-painel);
+    border-top: 1px solid #333;
+}
+
+.shepherd-theme-custom .shepherd-button {
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-weight: 600;
+    font-size: 12px;
+    transition: all 0.3s;
+    margin-left: 6px;
+}
+
+.shepherd-theme-custom .shepherd-button.shepherd-button-primary {
+    background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+    border: none;
+    color: white;
+}
+
+.shepherd-theme-custom .shepherd-button.shepherd-button-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+}
+
+.shepherd-theme-custom .shepherd-button:not(.shepherd-button-primary) {
+    background: transparent;
+    border: 1px solid #444;
+    color: #aaa;
+}
+
+.shepherd-theme-custom .shepherd-button:not(.shepherd-button-primary):hover {
+    background: #2a2a2a;
+    color: #fff;
+}
+
+.shepherd-theme-custom .shepherd-cancel-icon {
+    color: #aaa;
+    font-size: 18px;
+}
+
+.shepherd-theme-custom .shepherd-cancel-icon:hover {
+    color: #fff;
+}
+
 @keyframes twinkle {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.7; transform: scale(1.1); }

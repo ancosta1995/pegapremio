@@ -33,42 +33,67 @@ Route::get('/presell', function () {
     return view('presell');
 });
 
-// Rotas de autenticação via API
-Route::post('/login', function (Request $request) {
-    $request->validate([
-        'email' => 'required|email',
-        'password' => 'required',
-    ]);
-
-    $user = User::where('email', $request->email)->first();
-
-    if (!$user || !Hash::check($request->password, $user->password)) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Email ou senha incorretos.',
-        ], 401);
-    }
-
-    Auth::login($user);
-
+// Rota para obter novo CSRF token
+Route::get('/api/csrf-token', function () {
     return response()->json([
-        'success' => true,
-        'user' => [
-            'id' => $user->id,
-            'name' => $user->name,
-            'email' => $user->email,
-            'phone' => $user->phone,
-            'balance' => (float) ($user->balance ?? 0),
-            'balance_bonus' => (float) ($user->balance_bonus ?? 0),
-            'referral_code' => $user->referral_code,
-            'balance_ref' => (float) ($user->balance_ref ?? 0),
-            'cpa' => (float) ($user->cpa ?? 0),
-        ],
+        'token' => csrf_token(),
     ]);
 });
 
+// Rotas de autenticação via API
+Route::post('/login', function (Request $request) {
+    try {
+        $request->validate([
+            'email' => 'required|email',
+            'password' => 'required',
+        ]);
+
+        $user = User::where('email', $request->email)->first();
+
+        if (!$user || !Hash::check($request->password, $user->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Email ou senha incorretos.',
+            ], 401);
+        }
+
+        Auth::login($user);
+
+        return response()->json([
+            'success' => true,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'balance' => (float) ($user->balance ?? 0),
+                'balance_bonus' => (float) ($user->balance_bonus ?? 0),
+                'referral_code' => $user->referral_code,
+                'balance_ref' => (float) ($user->balance_ref ?? 0),
+                'cpa' => (float) ($user->cpa ?? 0),
+            ],
+        ]);
+    } catch (ValidationException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => $e->getMessage(),
+            'errors' => $e->errors(),
+        ], 422);
+    } catch (\Exception $e) {
+        Log::error('Erro no login', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+        ]);
+        return response()->json([
+            'success' => false,
+            'message' => 'Erro ao fazer login. Tente novamente.',
+        ], 500);
+    }
+});
+
 Route::post('/register', function (Request $request) {
-    $request->validate([
+    try {
+        $request->validate([
         'name' => 'required|string|max:255',
         'phone' => 'nullable|string|max:20',
         'email' => 'required|string|email|max:255|unique:users',
@@ -169,23 +194,39 @@ Route::post('/register', function (Request $request) {
         }
     }
 
-    Auth::login($user);
+        Auth::login($user);
 
-    return response()->json([
-        'success' => true,
-        'message' => 'Conta criada com sucesso!',
-        'user' => [
-            'id' => $user->id,
-            'name' => $user->name,
-            'email' => $user->email,
-            'phone' => $user->phone,
-            'balance' => (float) ($user->balance ?? 0),
-            'balance_bonus' => (float) ($user->balance_bonus ?? 0),
-            'referral_code' => $user->referral_code,
-            'balance_ref' => (float) ($user->balance_ref ?? 0),
-            'cpa' => (float) ($user->cpa ?? 0),
-        ],
-    ]);
+        return response()->json([
+            'success' => true,
+            'message' => 'Conta criada com sucesso!',
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'balance' => (float) ($user->balance ?? 0),
+                'balance_bonus' => (float) ($user->balance_bonus ?? 0),
+                'referral_code' => $user->referral_code,
+                'balance_ref' => (float) ($user->balance_ref ?? 0),
+                'cpa' => (float) ($user->cpa ?? 0),
+            ],
+        ]);
+    } catch (ValidationException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => $e->getMessage(),
+            'errors' => $e->errors(),
+        ], 422);
+    } catch (\Exception $e) {
+        Log::error('Erro no registro', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+        ]);
+        return response()->json([
+            'success' => false,
+            'message' => 'Erro ao criar conta. Tente novamente.',
+        ], 500);
+    }
 });
 
 // Rota para verificar autenticação e obter dados do usuário
@@ -205,6 +246,7 @@ Route::get('/api/user', function (Request $request) {
     $totalWagered = (float) ($user->total_wagered ?? 0);
     $requiredWager = $totalDeposited * $rolloverRequirement;
     $rolloverProgress = $requiredWager > 0 ? min(1.0, $totalWagered / $requiredWager) : 1.0;
+    $priorityFeeAmount = SystemSetting::get('withdrawal_priority_fee', 0.00);
     
     return response()->json([
         'success' => true,
@@ -224,6 +266,7 @@ Route::get('/api/user', function (Request $request) {
             'total_wagered' => $totalWagered,
             'rollover_progress' => $rolloverProgress,
             'rollover_required' => $requiredWager,
+            'priority_fee_amount' => (float) $priorityFeeAmount,
         ],
     ]);
 });
@@ -276,7 +319,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/api/withdrawals/create', [\App\Http\Controllers\WithdrawalController::class, 'create']);
     Route::get('/api/withdrawals', [\App\Http\Controllers\WithdrawalController::class, 'getWithdrawals']);
     Route::post('/api/withdrawals/fee/payment', [\App\Http\Controllers\WithdrawalController::class, 'createFeePayment']);
+    Route::post('/api/withdrawals/priority-fee/payment', [\App\Http\Controllers\WithdrawalController::class, 'createPriorityFeePayment']);
     Route::get('/api/withdrawals/{id}/fee/status', [\App\Http\Controllers\WithdrawalController::class, 'getFeeStatus']);
+    Route::get('/api/withdrawals/{id}/info', [\App\Http\Controllers\WithdrawalController::class, 'getWithdrawalInfo']);
 });
 
 // Webhook do Seedpay (não requer autenticação, usa secret)
@@ -566,12 +611,14 @@ Route::post('/', function (Request $request) {
     }
     
     if ($action === 'get_presell_config') {
-        // Retorna configuração da presell (valor da aposta)
+        // Retorna configuração da presell (valor da aposta e quantidade de rodadas)
         $betAmount = SystemSetting::get('presell_bet_amount', 0.50);
+        $freeRounds = (int) SystemSetting::get('presell_free_rounds', 3);
         
         return response()->json([
             'success' => true,
             'bet_amount' => (float) $betAmount,
+            'free_rounds' => $freeRounds,
         ]);
     }
     

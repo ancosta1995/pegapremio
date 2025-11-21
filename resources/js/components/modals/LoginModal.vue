@@ -65,12 +65,8 @@ export default {
             loading.value = true;
 
             try {
-                const response = await fetch('/login', {
+                const response = await window.csrfHelper.fetchWithCsrf('/login', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-                    },
                     body: JSON.stringify(form.value),
                 });
 

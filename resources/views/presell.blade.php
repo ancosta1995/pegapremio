@@ -10,6 +10,10 @@
     <script src="https://cdn.jsdelivr.net/npm/notiflix@3.2.8/dist/notiflix-aio-3.2.8.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/notiflix@3.2.8/src/notiflix.min.css" rel="stylesheet">
     
+    <!-- Shepherd.js - Tour/Onboarding -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/shepherd.js@11.2.0/dist/css/shepherd.css" />
+    <script src="https://cdn.jsdelivr.net/npm/shepherd.js@11.2.0/dist/js/shepherd.min.js"></script>
+    
     <!-- Chart.js (se necessário) -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
