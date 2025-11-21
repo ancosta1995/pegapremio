@@ -183,11 +183,16 @@ class SeedpayGateway implements PaymentGatewayInterface
 
             $responseData = $response->json();
 
-            // Paymaker retorna trans_id como ID da transação (baseado no sistema antigo)
-            $transactionId = $responseData['trans_id'] ?? $responseData['pay_id'] ?? $responseData['transaction_id'] ?? $responseData['id'] ?? $responseData['payload']['id'] ?? null;
+            Log::info('Seedpay createTransaction response', [
+                'response_keys' => array_keys($responseData),
+                'response_preview' => json_encode($responseData),
+            ]);
+
+            // Seedpay/Hyperwallet pode retornar paymentId, trans_id, pay_id, etc.
+            $transactionId = $responseData['paymentId'] ?? $responseData['trans_id'] ?? $responseData['pay_id'] ?? $responseData['transaction_id'] ?? $responseData['id'] ?? $responseData['payload']['id'] ?? null;
             
-            // Paymaker retorna o código PIX em pay_codepix (baseado no sistema antigo)
-            $qrCodeText = $responseData['pay_codepix'] ?? $responseData['qr_code_text'] ?? $responseData['payload']['qr_code_text'] ?? null;
+            // Seedpay/Hyperwallet retorna o código PIX em pixCode ou pay_codepix
+            $qrCodeText = $responseData['pixCode'] ?? $responseData['pay_codepix'] ?? $responseData['qr_code_text'] ?? $responseData['payload']['qr_code_text'] ?? null;
             
             // Gera URL do QR Code se tiver o código PIX
             $qrCodeImageUrl = null;
@@ -252,6 +257,13 @@ class SeedpayGateway implements PaymentGatewayInterface
     public function processWebhook(array $payload, ?string $secretFromUrl = null): array
     {
         try {
+            Log::info('Seedpay webhook received', [
+                'payload_keys' => array_keys($payload),
+                'status' => $payload['status'] ?? 'not_set',
+                'paymentId' => $payload['paymentId'] ?? 'not_set',
+                'totalValue' => $payload['totalValue'] ?? 'not_set',
+            ]);
+
             // Valida secret do webhook se configurado
             // O secret pode vir na URL ou no payload
             $providedSecret = $secretFromUrl ?? $payload['secret'] ?? null;
@@ -263,30 +275,51 @@ class SeedpayGateway implements PaymentGatewayInterface
             }
             // Se não tiver secret configurado, aceita qualquer requisição (como no sistema antigo)
 
-            // Paymaker envia paymentId como identificador (baseado no sistema antigo)
+            // Seedpay/Hyperwallet envia paymentId como identificador
             $transactionId = $payload['paymentId'] ?? $payload['trans_id'] ?? $payload['transaction_id'] ?? $payload['chargeId'] ?? $payload['id'] ?? null;
-            $status = $this->mapStatus($payload['status'] ?? 'pending');
-            $amount = isset($payload['amount']) ? (float) $payload['amount'] : null;
             
-            // Se amount estiver em centavos (totalValue), converte
-            if (isset($payload['totalValue'])) {
-                $amount = (float) $payload['totalValue'] / 100;
-            } elseif ($amount && $amount > 1000) {
-                $amount = $amount / 100;
+            if (!$transactionId) {
+                throw new \Exception('ID da transação não encontrado no webhook');
             }
 
-            return [
-                'success' => true,
+            // Mapeia status (pode vir como "APPROVED" em uppercase)
+            $status = $this->mapStatus($payload['status'] ?? 'pending');
+            
+            // Calcula valor: totalValue está em centavos (ex: 1000 = R$ 10,00)
+            $amount = null;
+            if (isset($payload['totalValue'])) {
+                $amount = (float) $payload['totalValue'] / 100;
+            } elseif (isset($payload['amount'])) {
+                $amount = (float) $payload['amount'];
+                // Se o valor for muito grande (provavelmente está em centavos), converte
+                if ($amount > 1000) {
+                    $amount = $amount / 100;
+                }
+            }
+
+            // Pega método de pagamento
+            $paymentMethod = $payload['paymentMethod'] ?? $payload['payment_method'] ?? 'PIX';
+
+            Log::info('Seedpay webhook processed', [
                 'transaction_id' => $transactionId,
                 'status' => $status,
                 'amount' => $amount,
-                'payment_method' => $payload['payment_method'] ?? 'PIX',
-                'provider_transaction_id' => $transactionId,
+                'payment_method' => $paymentMethod,
+            ]);
+
+            return [
+                'success' => true,
+                'transaction_id' => (string) $transactionId,
+                'status' => $status,
+                'amount' => $amount,
+                'payment_method' => $paymentMethod,
+                'provider_transaction_id' => (string) $transactionId,
             ];
         } catch (\Exception $e) {
             Log::error('Seedpay processWebhook error', [
                 'error' => $e->getMessage(),
                 'payload' => $payload,
+                'trace' => $e->getTraceAsString(),
             ]);
             throw $e;
         }

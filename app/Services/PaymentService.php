@@ -64,12 +64,24 @@ class PaymentService
             ]);
 
             // Atualiza transação com dados do gateway
+            // Converte gateway_transaction_id para string para garantir consistência
+            $gatewayTransactionId = $gatewayResponse['transaction_id'] ?? null;
+            if ($gatewayTransactionId !== null) {
+                $gatewayTransactionId = (string) $gatewayTransactionId;
+            }
+            
             $transaction->update([
-                'gateway_transaction_id' => $gatewayResponse['transaction_id'] ?? null,
+                'gateway_transaction_id' => $gatewayTransactionId,
                 'payment_url' => $gatewayResponse['payment_url'] ?? null,
                 'qr_code' => $gatewayResponse['qr_code'] ?? null,
                 'qr_code_text' => $gatewayResponse['qr_code_text'] ?? null,
                 'gateway_response' => $gatewayResponse['raw_response'] ?? null,
+            ]);
+            
+            Log::info('PaymentService transaction created and updated', [
+                'transaction_id' => $transaction->id,
+                'gateway_transaction_id' => $gatewayTransactionId,
+                'amount' => $transaction->amount,
             ]);
 
             // Envia evento ADD_TO_CART quando o QR code é gerado
@@ -127,15 +139,51 @@ class PaymentService
     public function processWebhook(array $payload, ?string $secretFromUrl = null): PaymentTransaction
     {
         try {
+            Log::info('PaymentService processWebhook started', [
+                'payload_keys' => array_keys($payload),
+                'paymentId' => $payload['paymentId'] ?? 'not_set',
+            ]);
+
             $gatewayResponse = $this->gateway->processWebhook($payload, $secretFromUrl);
             
-            // Busca transação pelo ID do gateway
-            $transaction = PaymentTransaction::where('gateway_transaction_id', $gatewayResponse['transaction_id'])
+            Log::info('PaymentService gateway response', [
+                'transaction_id' => $gatewayResponse['transaction_id'],
+                'status' => $gatewayResponse['status'],
+                'amount' => $gatewayResponse['amount'],
+            ]);
+            
+            // Busca transação pelo ID do gateway (pode ser string ou número)
+            $transactionId = (string) $gatewayResponse['transaction_id'];
+            $transaction = PaymentTransaction::where('gateway_transaction_id', $transactionId)
+                ->orWhere('gateway_transaction_id', (int) $transactionId)
                 ->first();
 
             if (!$transaction) {
-                throw new \Exception("Transação não encontrada: {$gatewayResponse['transaction_id']}");
+                // Tenta buscar por qualquer campo que possa ter o ID
+                Log::warning('PaymentService transaction not found by gateway_transaction_id', [
+                    'gateway_transaction_id' => $transactionId,
+                    'payload_paymentId' => $payload['paymentId'] ?? null,
+                ]);
+                
+                // Lista últimas transações pendentes para debug
+                $recentTransactions = PaymentTransaction::where('status', 'pending')
+                    ->orderBy('created_at', 'desc')
+                    ->limit(5)
+                    ->get(['id', 'gateway_transaction_id', 'amount', 'created_at']);
+                
+                Log::info('PaymentService recent pending transactions', [
+                    'transactions' => $recentTransactions->toArray(),
+                ]);
+                
+                throw new \Exception("Transação não encontrada: {$transactionId}");
             }
+
+            Log::info('PaymentService transaction found', [
+                'transaction_id' => $transaction->id,
+                'gateway_transaction_id' => $transaction->gateway_transaction_id,
+                'old_status' => $transaction->status,
+                'new_status' => $gatewayResponse['status'],
+            ]);
 
             $oldStatus = $transaction->status;
             $newStatus = $gatewayResponse['status'];
