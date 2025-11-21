@@ -334,6 +334,13 @@
             @showLogin="showLoginFromRegister"
             @registered="handleRegistered"
         />
+
+        <WelcomeModal
+            v-if="showWelcomeModal"
+            :free-rounds="presellFreeRounds"
+            @close="closeWelcomeModal"
+            @play="handleWelcomePlay"
+        />
     </div>
 </template>
 
@@ -349,6 +356,7 @@ import WithdrawalFeePaymentModal from './modals/WithdrawalFeePaymentModal.vue';
 import WithdrawalQueueModal from './modals/WithdrawalQueueModal.vue';
 import LoginModal from './modals/LoginModal.vue';
 import RegisterModal from './modals/RegisterModal.vue';
+import WelcomeModal from './modals/WelcomeModal.vue';
 import ProfilePage from './pages/ProfilePage.vue';
 import WalletPage from './pages/WalletPage.vue';
 import AffiliatePage from './pages/AffiliatePage.vue';
@@ -366,6 +374,7 @@ export default {
         WithdrawalQueueModal,
         LoginModal,
         RegisterModal,
+        WelcomeModal,
         ProfilePage,
         WalletPage,
         AffiliatePage,
@@ -456,7 +465,10 @@ export default {
         const priorityFeePaid = ref(false);
         const showLoginModal = ref(false);
         const showRegisterModal = ref(false);
+        const showWelcomeModal = ref(false);
+        const justRegistered = ref(false); // Flag para detectar registro recente
         const winAmount = ref(0);
+        let currentTour = null; // Referência ao tour ativo
         const winMultiplier = ref(0);
         const hasHookLeft = ref(true); // Pode ser verificado dinamicamente se necessário
 
@@ -1343,6 +1355,21 @@ export default {
         };
 
         const openRegisterModal = () => {
+            // Para o tour se estiver ativo
+            if (currentTour) {
+                try {
+                    // Verifica se o tour está ativo e o completa
+                    if (typeof currentTour.isActive === 'function' && currentTour.isActive()) {
+                        currentTour.complete();
+                    } else if (currentTour.currentStep) {
+                        // Se não tem isActive, tenta completar diretamente
+                        currentTour.complete();
+                    }
+                    currentTour = null;
+                } catch (e) {
+                    console.log('Erro ao parar tour:', e);
+                }
+            }
             showRegisterModal.value = true;
         };
 
@@ -1390,6 +1417,28 @@ export default {
                 userCpa.value = parseFloat(data.user.cpa || 0);
                 priorityFeeAmount.value = parseFloat(data.user.priority_fee_amount || 0);
                 initializeGame();
+                
+                // Para o tour se estiver ativo
+                if (currentTour) {
+                    try {
+                        if (typeof currentTour.isActive === 'function' && currentTour.isActive()) {
+                            currentTour.complete();
+                        } else if (currentTour.currentStep) {
+                            currentTour.complete();
+                        }
+                        currentTour = null;
+                    } catch (e) {
+                        console.log('Erro ao parar tour:', e);
+                    }
+                }
+                
+                // Fecha o modal de registro
+                closeRegisterModal();
+                
+                // Adiciona parâmetro na URL e redireciona para a página principal
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set('registered', 'true');
+                window.location.href = currentUrl.toString();
             }
         };
 
@@ -1415,6 +1464,47 @@ export default {
             } catch (error) {
                 console.error('Erro ao verificar autenticação:', error);
                 isUserLoggedIn.value = false;
+            }
+        };
+
+        // Funções do modal de boas-vindas
+        const closeWelcomeModal = () => {
+            showWelcomeModal.value = false;
+        };
+
+        const handleWelcomePlay = () => {
+            closeWelcomeModal();
+            // Redireciona para a presell
+            window.location.href = '/presell';
+        };
+
+        // Verifica se é o primeiro acesso e mostra o modal de boas-vindas
+        const checkFirstAccess = async () => {
+            // Só mostra se não estiver em modo presell e não estiver logado
+            if (isPresellMode.value || isUserLoggedIn.value) {
+                return;
+            }
+
+            // Verifica se já viu o modal antes
+            const hasSeenWelcome = localStorage.getItem('welcome_modal_seen');
+            
+            // Se não viu, carrega a configuração e mostra o modal
+            if (!hasSeenWelcome) {
+                try {
+                    // Carrega a configuração de rodadas grátis do painel admin
+                    const config = await internalApiRequest('get_presell_config');
+                    if (config.success && config.free_rounds) {
+                        presellFreeRounds.value = parseInt(config.free_rounds);
+                    }
+                } catch (error) {
+                    console.log('Erro ao carregar configuração de rodadas grátis:', error);
+                    // Mantém o valor padrão (3)
+                }
+                
+                // Aguarda um pouco para garantir que a página carregou completamente
+                setTimeout(() => {
+                    showWelcomeModal.value = true;
+                }, 500);
             }
         };
 
@@ -1462,6 +1552,9 @@ export default {
                 },
                 useModalOverlay: true
             });
+            
+            // Salva referência do tour
+            currentTour = tour;
 
             // Step 1: Botão de depositar (começa pelo botão)
             tour.addStep({
@@ -1734,6 +1827,25 @@ export default {
             // Verificar autenticação primeiro
             await checkAuthentication();
             
+            // Verifica se veio de um registro (parâmetro na URL)
+            const urlParams = new URLSearchParams(window.location.search);
+            const isRegistered = urlParams.get('registered') === 'true';
+            
+            if (isRegistered && isUserLoggedIn.value) {
+                // Remove o parâmetro da URL
+                urlParams.delete('registered');
+                const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+                window.history.replaceState({}, '', newUrl);
+                
+                // Aguarda um pouco para garantir que tudo carregou
+                setTimeout(() => {
+                    openDepositModal();
+                }, 500);
+            } else {
+                // Verifica se é o primeiro acesso (após verificar autenticação)
+                checkFirstAccess();
+            }
+            
             // Inicializa a rota baseada na URL atual (após verificar autenticação)
             initializeRoute();
             
@@ -1814,6 +1926,7 @@ export default {
             priorityFeePaid,
             showLoginModal,
             showRegisterModal,
+            showWelcomeModal,
             winAmount,
             winMultiplier,
             presellMultipliers,
@@ -1856,6 +1969,8 @@ export default {
             showLoginFromRegister,
             handleLoggedIn,
             handleRegistered,
+            closeWelcomeModal,
+            handleWelcomePlay,
             closeWinModal,
             closeLossModal,
         };

@@ -908,6 +908,23 @@ body, html {
     color: #fff;
 }
 
+/* Seta do tooltip - mesma cor do tooltip */
+.shepherd-theme-custom .shepherd-arrow {
+    width: 16px;
+    height: 16px;
+}
+
+.shepherd-theme-custom .shepherd-arrow::before {
+    background: var(--cor-fundo-painel) !important;
+    border-color: var(--cor-fundo-painel) !important;
+}
+
+/* Borda da seta para combinar com a borda do tooltip */
+.shepherd-theme-custom .shepherd-arrow::after {
+    background: #333 !important;
+    border-color: #333 !important;
+}
+
 @keyframes twinkle {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.7; transform: scale(1.1); }
