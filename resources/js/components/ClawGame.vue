@@ -4,7 +4,7 @@
         <div id="confetti-container" ref="confettiContainer"></div>
 
         <!-- Audio Elements -->
-        <audio ref="backgroundMusic" :src="asset('assets/sounds/panto-clowns-jingle-271283.mp3')" loop></audio>
+        <!-- <audio ref="backgroundMusic" :src="asset('assets/sounds/panto-clowns-jingle-271283.mp3')" loop></audio> -->
         <audio ref="winSound" :src="asset('assets/sounds/win.wav')"></audio>
         <audio ref="lossSound" :src="asset('assets/sounds/loss.wav')"></audio>
 
@@ -1729,14 +1729,14 @@ export default {
             resetGame();
         };
 
-        // Music initialization
-        const startMusicOnFirstInteraction = () => {
-            if (backgroundMusic.value && backgroundMusic.value.paused) {
-                backgroundMusic.value.play().catch(e => console.error('Autoplay bloqueado:', e));
-            }
-            document.body.removeEventListener('click', startMusicOnFirstInteraction);
-            document.body.removeEventListener('touchend', startMusicOnFirstInteraction);
-        };
+        // Music initialization - DESABILITADO
+        // const startMusicOnFirstInteraction = () => {
+        //     if (backgroundMusic.value && backgroundMusic.value.paused) {
+        //         backgroundMusic.value.play().catch(e => console.error('Autoplay bloqueado:', e));
+        //     }
+        //     document.body.removeEventListener('click', startMusicOnFirstInteraction);
+        //     document.body.removeEventListener('touchend', startMusicOnFirstInteraction);
+        // };
 
         // Helper functions para toasts natalinos
         const showSuccessToast = (message) => {
@@ -1852,8 +1852,9 @@ export default {
             // Adiciona listener para mudanças no histórico (botão voltar/avançar)
             window.addEventListener('popstate', handlePopState);
             
-            document.body.addEventListener('click', startMusicOnFirstInteraction);
-            document.body.addEventListener('touchend', startMusicOnFirstInteraction);
+            // Som de fundo desabilitado
+            // document.body.addEventListener('click', startMusicOnFirstInteraction);
+            // document.body.addEventListener('touchend', startMusicOnFirstInteraction);
             
             // Inicializar o jogo
             initializeGame();
@@ -1862,8 +1863,9 @@ export default {
         onUnmounted(() => {
             cancelAnimationFrame(swayAnimationId);
             cancelAnimationFrame(itemsAnimationId);
-            document.body.removeEventListener('click', startMusicOnFirstInteraction);
-            document.body.removeEventListener('touchend', startMusicOnFirstInteraction);
+            // Som de fundo desabilitado
+            // document.body.removeEventListener('click', startMusicOnFirstInteraction);
+            // document.body.removeEventListener('touchend', startMusicOnFirstInteraction);
             // Remove listener do histórico
             window.removeEventListener('popstate', handlePopState);
         });
