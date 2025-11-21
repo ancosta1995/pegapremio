@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <title>Meu Perfil</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            background: linear-gradient(135deg, #1a2332 0%, #2a3441 100%);
+            color: white;
+            min-height: 100vh;
+            line-height: 1.4;
+        }
+        
+        svg.lucide {
+          width: 18px;
+          height: 18px;
+          stroke-width: 2;
+          margin-right: 5px;
+          vertical-align: middle;
+        }
+
+        .header {
+            background: rgba(26, 35, 50, 0.95);
+            padding: 12px 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+        }
+
+        .logo {
+            font-size: 26px;
+            font-weight: 800;
+            color: #4CAF50;
+            text-decoration: none;
+            letter-spacing: -0.5px;
+        }
+
+        .logo span {
+            color: #FFC107;
+        }
+
+        .nav-menu {
+            display: flex;
+            gap: 30px;
+        }
+
+        .nav-menu a {
+            color: white;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 15px;
+            transition: color 0.3s;
+        }
+
+        .nav-menu a:hover {
+            color: #4CAF50;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(90deg, #32cd32, #00c853);
+            color: #070b2d;
+            border: 2px solid #32cd32;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(90deg, #2eb82e, #00b34d);
+            border-color: #2eb82e;
+            color: white;
+        }
+
+        /* Menu de Usuário */
+        .user-menu {
+            position: relative;
+            display: inline-block;
+        }
+
+        .user-menu-btn {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 6px;
+            color: white;
+            padding: 8px 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .user-menu-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .dropdown-arrow {
+            font-size: 10px;
+            transition: transform 0.3s;
+        }
+
+        .user-menu.active .dropdown-arrow {
+            transform: rotate(180deg);
+        }
+
+        .user-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: rgba(26, 35, 50, 0.98);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            min-width: 200px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.3s;
+            margin-top: 5px;
+        }
+
+        .user-dropdown.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .user-balance-inline {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end; 
+            font-size: 14px;
+            line-height: 1.2;
+            margin-right: 10px;
+        }
+        
+        .user-balance-inline div:first-child {
+            color: #888;
+            font-weight: normal;
+            text-align: right;
+        }
+        
+        .user-balance-inline div:last-child {
+            color: #00ff88;
+            font-weight: bold;
+            text-align: right;
+            margin-right: 0;
+        }
+
+        .dropdown-item {
+            display: block;
+            padding: 12px 15px;
+            color: white;
+            text-decoration: none;
+            font-size: 14px;
+            transition: background 0.3s;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .dropdown-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #4CAF50;
+        }
+
+        .dropdown-item:last-child {
+            border-radius: 0 0 8px 8px;
+        }
+
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+        
+        .container h2 {
+            font-size: 26px;
+            font-weight: 500;
+        }
+        
+        .page-title {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: white;
+        }
+
+        .page-subtitle {
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+
+        .profile-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            margin-bottom: 30px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .section-icon {
+            width: 24px;
+            height: 24px;
+            color: #4CAF50;
+            font-size: 20px;
+        }
+
+        .section-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: white;
+        }
+
+        .section-subtitle {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        
+        #profileForm {
+          max-width: 360px;
+          margin: 0;
+          padding: 20px 0;
+        }
+        
+        /* Agrupamento de campo com ícone */
+        #profileForm .input-group {
+          display: flex;
+          align-items: center;
+          background: rgba(255, 255, 255, 0.08);
+          border-radius: 6px;
+          margin-bottom: 15px;
+          padding: 8px 10px;
+          gap: 10px;
+        }
+        
+        #profileForm .input-group i {
+          color: #aaa;
+          flex-shrink: 0;
+        }
+        
+        #profileForm .input-group input {
+          border: none;
+          background: transparent;
+          color: #fff;
+          font-size: 14px;
+          flex: 1;
+          padding: 10px 0;
+          outline: none;
+        }
+        
+        /* Botão de envio */
+        #profileForm .btn-save {
+          width: 100%;
+          background: linear-gradient(90deg, #32cd32, #00c853);
+          border: none;
+          padding: 12px;
+          color: #000;
+          font-weight: 700;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 16px;
+          margin-top: 10px;
+        }
+        
+        /* Mensagem de feedback (sucesso ou erro) */
+        #profileMsg {
+          margin-top: 12px;
+          font-size: 14px;
+          text-align: center;
+          color: #f44336; /* vermelho padrão para erro */
+        }
+
+        .account-info {
+            display: grid;
+            gap: 20px;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 15px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .info-item:last-child {
+            border-bottom: none;
+        }
+
+        .info-icon {
+            width: 20px;
+            height: 20px;
+            color: #4CAF50;
+            font-size: 16px;
+        }
+
+        .info-content {
+            flex: 1;
+        }
+
+        .info-label {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+
+        .info-value {
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .balance-section {
+            position: relative;
+            background: linear-gradient(135deg, #061243 0%, #0A1A5F 100%);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 30px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+            isolation: isolate;
+            overflow: hidden;
+        }
+
+        .balance-section::before {
+            content: "";
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.09) 0%, transparent 70%);
+            transform: rotate(45deg);
+            z-index: 0;
+            animation: lightSweep 3s linear infinite;
+            pointer-events: none;
+        }
+        
+        @keyframes lightSweep {
+            0% { transform: translateX(-100%) rotate(45deg); }
+            100% { transform: translateX(100%) rotate(45deg); }
+        }
+        
+        .balance-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: white;
+            margin-bottom: 10px;
+        }
+
+        .balance-amount {
+            font-size: 36px;
+            font-weight: 800;
+            color: #4CAF50;
+            margin-bottom: 10px;
+        }
+
+        .balance-subtitle {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 14px;
+        }
+
+        .quick-links {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            margin-bottom: 30px;
+        }
+
+        .quick-links h3 {
+            color: white;
+            font-weight: 700;
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+
+        .links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+        }
+
+        .quick-link {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            text-decoration: none;
+            color: white;
+            transition: all 0.3s;
+            text-align: center;
+        }
+
+        .quick-link:hover {
+            background: rgba(255, 255, 255, 0.15);
+            transform: translateY(-2px);
+        }
+
+        .quick-link-icon {
+            font-size: 26px;
+            margin-bottom: 8px;
+        }
+
+        .quick-link-text {
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .footer {
+            background: rgba(26, 35, 50, 0.95);
+            padding: 40px 0 20px;
+            margin-top: 80px;
+        }
+
+        .footer-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 40px;
+            margin-bottom: 30px;
+        }
+
+        .footer-section h3 {
+            color: #4CAF50;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+
+        .footer-section p {
+            color: #ccc;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .footer-section ul {
+            list-style: none;
+        }
+
+        .footer-section ul li {
+            margin-bottom: 10px;
+        }
+
+        .footer-section ul li a {
+            color: #ccc;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .footer-section ul li a:hover {
+            color: #4CAF50;
+        }
+
+        .footer-bottom {
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #999;
+            font-size: 14px;
+        }
+
+        .pix-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .pix-brand {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 30px;
+        }
+        
+        .pix-brand img {
+          height: 100%;
+          max-height: 30px;
+          object-fit: contain;
+          display: block;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px 15px;
+            }
+
+            .nav-container {
+                padding: 0 15px;
+            }
+
+            .nav-menu {
+                display: none;
+            }
+
+            .page-title {
+                font-size: 28px;
+            }
+
+            .profile-section {
+                padding: 20px;
+            }
+
+            .balance-section {
+                padding: 20px;
+            }
+
+            .balance-amount {
+                font-size: 28px;
+            }
+
+            .links-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 480px) {
+            svg.lucide {
+                width: 18px;
+                height: 18px;
+                stroke-width: 1.8;
+                margin-right: 4px;
+            }
+            
+            .nav-buttons {
+                gap: 8px;
+            }
+
+            .btn {
+                padding: 8px 16px;
+                font-size: 13px;
+            }
+
+            .user-menu-btn {
+                padding: 6px 10px;
+                font-size: 12px;
+            }
+
+            .page-title {
+                font-size: 24px;
+            }
+
+            .profile-section {
+                padding: 15px;
+            }
+
+            .balance-section {
+                padding: 15px;
+            }
+
+            .balance-amount {
+                font-size: 24px;
+            }
+
+            .section-title {
+                font-size: 18px;
+            }
+            .user-balance {
+                padding: 12px;
+                font-size: 13px;
+            }
+        }
+    </style>
+        <link rel="stylesheet" href="/assets/css/deposit-success-modal.css">
+
+</head>
+
+<body>
+
+ <header class="header">
+        <div class="nav-container">
+                <a href="/" class="logo">
+                  <img src="/images/logo.png" alt="Raspe Aqui" style="height: 72px;">
+                </a>           
+            <nav class="nav-menu">
+                <a href="/"> <i data-lucide="house"></i> Início</a>
+                <a href="/#raspadinhas"><i data-lucide="layout-grid"></i> Raspadinhas</a>
+            </nav>
+            
+            <div class="nav-buttons">
+                <div class="user-balance-inline">
+                    <div>Saldo</div>
+                    <div id="userBalance"> </div>
+                </div>
+                <div class="user-menu">
+                    <button id="userMenuBtn" class="user-menu-btn">
+                        <span><i data-lucide="user" style="width: 24px; height: 24px;"></i></span>
+                        <span class="dropdown-arrow"><i data-lucide="chevron-down"></i></span>
+                    </button>
+                    <div id="userDropdown" class="user-dropdown">
+                        <div class="dropdown-divider"></div>
+                        <a href="/perfil/" class="dropdown-item"><i data-lucide="user-cog"></i> Perfil</a>
+                        <a href="/#raspadinhas" class="dropdown-item"><i data-lucide="layout-grid"></i> Jogar</a>
+                        <a href="/saque/" class="dropdown-item"><i data-lucide="banknote-arrow-down"></i> Sacar</a>
+                        <a href="/historico/" class="dropdown-item"><i data-lucide="gamepad-2"></i> Histórico</a>
+                        <a href="/deposito/" class="dropdown-item"><i data-lucide="banknote-arrow-up"></i> Depositar</a>
+                        <a href="/api/logout.php" class="dropdown-item"><i data-lucide="log-out"></i> Sair</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+
+    <main class="container">
+        <h2 class="page-title"><i data-lucide="settings" style="width: 24px; height: 24px;"></i> Meu Perfil</h2>
+        <p class="page-subtitle">Gerencie suas informações:</p>
+
+        <div class="balance-section">
+            <div class="balance-title"><i data-lucide="wallet"></i>Saldo Atual</div>
+            <div class="balance-amount" id="saldoDisponivel">R$  </div>
+            <div class="balance-subtitle">Disponível para jogar...</div>
+        </div>
+
+        <section class="profile-section">
+            <div class="section-header">
+                <span class="section-icon"><i data-lucide="user-cog" style="width: 32px; height: 32px;"></i></span>
+                <div>
+                    <h2 class="section-title">Informações Pessoais</h2>
+                    <p class="section-subtitle">Atualize suas informações pessoais abaixo:</p>
+                </div>
+            </div>
+
+            <form id="profileForm">
+              <div class="input-group">
+                <i data-lucide="user"></i>
+                <input type="text" id="nome" name="nome" placeholder="Seu nome completo" required autocomplete="name" maxlength="60">
+              </div>
+            
+              <div class="input-group">
+                <i data-lucide="mail"></i>
+                <input type="email" id="email" name="email" placeholder="Seu e-mail" required autocomplete="email" maxlength="80">
+              </div>
+            
+              <button type="submit" class="btn-save">Salvar Alterações <i data-lucide="square-check-big"></i></button>
+            </form>
+        </section>
+
+        <section class="profile-section">
+            <div class="section-header">
+                <span class="section-icon"><i data-lucide="fingerprint"></i></span>
+                <div>
+                    <h2 class="section-title">Informações da Conta</h2>
+                </div>
+            </div>
+
+            <div class="account-info">
+                <div class="info-item">
+                    <span class="info-icon"><i data-lucide="user"></i></span>
+                    <div class="info-content">
+                        <div class="info-label">Username</div>
+                        <div id="usernamePerfil" class="info-value username">carlos4751</div>
+                    </div>
+                </div>
+
+                <div class="info-item">
+                    <span class="info-icon"><i data-lucide="mail"></i></span>
+                    <div class="info-content">
+                        <div class="info-label">Email</div>
+                        <div id="emailPerfil" class="info-value email">carlos4751@gmail.com</div>
+                    </div>
+                </div>
+
+                <div class="info-item">
+                    <span class="info-icon"><i data-lucide="calendar-heart"></i></span>
+                    <div class="info-content">
+                        <div class="info-label">Membro desde</div>
+                        <div class="info-value membroDesde">N/A</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="quick-links">
+            <h3>Links Rápidos</h3>
+            <div class="links-grid">
+                <a href="/" class="quick-link">
+                    <div class="quick-link-icon"><i data-lucide="house"></i></div>
+                    <div class="quick-link-text">Início</div>
+                </a>
+                <a href="/perfil/" class="quick-link">
+                    <div class="quick-link-icon"><i data-lucide="user-cog"></i></div>
+                    <div class="quick-link-text">Meu Perfil</div>
+                </a>
+                <a href="/historico/" class="quick-link">
+                    <div class="quick-link-icon"><i data-lucide="gamepad-2"></i></div>
+                    <div class="quick-link-text">Histórico</div>
+                </a>
+                <a href="/deposito/" class="quick-link">
+                    <div class="quick-link-icon"><i data-lucide="banknote-arrow-up"></i></div>
+                    <div class="quick-link-text">Depósito</div>
+                </a>
+            </div>
+        </section>
+    </main>
+    
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3><i data-lucide="audio-waveform" style="transform: rotate(30deg);"></i>Raspou Prêmios</h3>
+                    <p>A Raspou Prêmios é um Título de Capitalização de Pagamento Único, modalidade Filantropia Premiável, emitido pela Kovr Capitalização S.A. – KOVRCAP (CNPJ nº 93.202.448/0001-79).</p>
+                    <p>Aprovado pela SUSEP através do processo indicado na cautela, nos termos da Lei Federal nº 14.332/2022 e das Circulares SUSEP nº 656/2022 e 676/2022.</p>
+                </div>
+
+                <div class="footer-section">
+                    <h3><i data-lucide="link"></i>Links Rápidos</h3>
+                    <ul>
+                        <li><a href="/">Início</a></li>
+                        <li><a href="/perfil/">Meu Perfil</a></li>
+                        <li><a href="/historico/">Histórico</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-section">
+                    <h3><i data-lucide="phone"></i>Suporte</h3>
+                    <ul>
+                        <li><a href="#">Como Jogar</a></li>
+                        <li><a href="#">Termos de Uso</a></li>
+                        <li><a href="#">Política de Privacidade</a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="footer-bottom">
+                <div>
+                    <p>© 2025 Raspou Prêmios - Kovr Capitalização S.A. – KOVRCAP CNPJ n.º 93.202.448/0001-79</p>
+                    <p><strong>Todos os direitos reservados.</strong></p>
+                    <p style="font-size: 12px; margin-top: 10px;">Jogue com responsabilidade. Proibida a venda para
+                        menores de 18 anos.</p>
+                </div>
+                <div class="pix-logo">
+                    <span>Pagamentos Digitais por:</span>
+                    <div class="pix-brand">
+                    <img src="/images/logo-pix.png" alt="Logo Pix" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+    
+<script>
+
+function animarSaldo(idElemento, valorFinal, prefixo = '', intervalo = 10) {
+    const elemento = document.getElementById(idElemento);
+    if (!elemento) return;
+
+    let valorAtual = 0;
+    const incremento = valorFinal / 50;
+
+    const timer = setInterval(() => {
+        valorAtual += incremento;
+        if (valorAtual >= valorFinal) {
+            clearInterval(timer);
+            elemento.textContent = prefixo + valorFinal.toLocaleString('pt-BR', { 
+                minimumFractionDigits: 2, 
+                maximumFractionDigits: 2 
+            });
+        } else {
+            elemento.textContent = prefixo + valorAtual.toLocaleString('pt-BR', { 
+                minimumFractionDigits: 2, 
+                maximumFractionDigits: 2 
+            });
+        }
+    }, intervalo);
+}
+
+    async function carregarDadosUsuario() {
+        try {
+            const res = await fetch('/api/user_info.php', { credentials: 'include' });
+            if (!res.ok) throw new Error('Não autenticado');
+            const data = await res.json();
+
+            // Preencher dados visuais
+            document.querySelector('.info-value.username').textContent = data.username;
+            document.querySelector('.info-value.email').textContent = data.email;
+            document.querySelector('.info-value.membroDesde').textContent = data.membro_desde;
+
+let saldoString = data.saldo || '0,00';
+let saldoNumerico = parseFloat(saldoString.replace(/\./g, '').replace(',', '.')) || 0;
+
+animarSaldo('userBalance', saldoNumerico);
+animarSaldo('saldoDisponivel', saldoNumerico, 'R$ ');
+
+        } catch (err) {
+            console.error(err);
+            alert('Erro ao carregar dados do usuário. Faça login novamente.');
+            window.location.href = '/';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const userMenuBtn = document.getElementById('userMenuBtn');
+        const userDropdown = document.getElementById('userDropdown');
+        const userMenu = document.querySelector('.user-menu');
+
+        if (userMenuBtn && userDropdown) {
+            userMenuBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                userDropdown.classList.toggle('show');
+                userMenu.classList.toggle('active');
+            });
+
+            document.addEventListener('click', function (e) {
+                if (!userMenu.contains(e.target)) {
+                    userDropdown.classList.remove('show');
+                    userMenu.classList.remove('active');
+                }
+            });
+        }
+
+        const profileForm = document.getElementById('profileForm');
+        if (profileForm) {
+            profileForm.addEventListener('submit', async function (e) {
+                e.preventDefault();
+
+                const nome = document.getElementById('nome').value.trim();
+                const email = document.getElementById('email').value.trim();
+
+                if (!nome || !email) {
+                    alert('Todos os campos são obrigatórios!');
+                    return;
+                }
+
+                const saveBtn = document.querySelector('.btn-save');
+                saveBtn.textContent = 'Salvando...';
+                saveBtn.disabled = true;
+
+                try {
+                    const res = await fetch('/api/update_user.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({ username: nome, email: email })
+                    });
+
+                    const result = await res.json();
+
+                    if (result.success) {
+                        saveBtn.textContent = 'Salvo ✓';
+                        saveBtn.style.background = '#4CAF50';
+                    } else {
+                        throw new Error(result.message || 'Erro desconhecido');
+                    }
+                } catch (err) {
+                    alert('Erro ao salvar os dados: ' + err.message);
+                }
+
+                setTimeout(() => {
+                    saveBtn.textContent = 'Salvar Alterações';
+                    saveBtn.disabled = false;
+                    saveBtn.style.background = '';
+                }, 2000);
+            });
+        }
+
+        carregarDadosUsuario();
+    });
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const transacaoId = localStorage.getItem('pendingTransactionId');
+    if (!transacaoId) return;
+
+    try {
+        const res = await fetch(`/api/status_transaction.php?transaction_id=${transacaoId}`);
+        const data = await res.json();
+
+        if (data.success && data.status === 'paid') {
+            localStorage.removeItem('pendingTransactionId');
+
+            const saldo = await fetch('/api/user_info.php', { credentials: 'include' })
+                .then(r => r.json())
+                .then(d => parseFloat((d.saldo || '0').replace(',', '.')))
+                .catch(() => 0.00);
+
+            const waitForModal = () => {
+                if (typeof window.showDepositSuccessModal === 'function') {
+                    window.showDepositSuccessModal(
+                        data.amount || 0.00,
+                        'PIX',
+                        transacaoId,
+                        saldo
+                    );
+                } else {
+                    setTimeout(waitForModal, 300);
+                }
+            };
+            waitForModal();
+        }
+    } catch (err) {
+        console.error('Erro ao verificar transação pendente:', err);
+    }
+});
+</script>
+<script src="/assets/js/deposit-success-modal.js"></script>
+
+
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>

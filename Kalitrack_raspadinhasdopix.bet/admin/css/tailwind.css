@@ -1,0 +1,14 @@
+```css
+/* Inclua o Tailwind CSS via CDN ou build local. Para este exemplo, use o CDN no HTML. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Estilos adicionais */
+table {
+    border-collapse: collapse;
+    width: 100%;
+}
+th, td {
+    border: 1px solid #ddd;
+}

@@ -1,0 +1,620 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Http\Request;
+use App\Models\User;
+use App\Models\GameMultiplier;
+use App\Models\GameHistory;
+use App\Models\SystemSetting;
+use App\Http\Controllers\PaymentController;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
+
+// Rotas da SPA - todas as rotas devem retornar a mesma view
+Route::get('/', function () {
+    return view('claw-game');
+});
+
+Route::get('/perfil', function () {
+    return view('claw-game');
+});
+
+Route::get('/carteira', function () {
+    return view('claw-game');
+});
+
+Route::get('/afiliados', function () {
+    return view('claw-game');
+});
+
+Route::get('/presell', function () {
+    return view('presell');
+});
+
+// Rotas de autenticação via API
+Route::post('/login', function (Request $request) {
+    $request->validate([
+        'email' => 'required|email',
+        'password' => 'required',
+    ]);
+
+    $user = User::where('email', $request->email)->first();
+
+    if (!$user || !Hash::check($request->password, $user->password)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Email ou senha incorretos.',
+        ], 401);
+    }
+
+    Auth::login($user);
+
+    return response()->json([
+        'success' => true,
+        'user' => [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'phone' => $user->phone,
+            'balance' => (float) ($user->balance ?? 0),
+            'balance_bonus' => (float) ($user->balance_bonus ?? 0),
+            'referral_code' => $user->referral_code,
+            'balance_ref' => (float) ($user->balance_ref ?? 0),
+            'cpa' => (float) ($user->cpa ?? 0),
+        ],
+    ]);
+});
+
+Route::post('/register', function (Request $request) {
+    $request->validate([
+        'name' => 'required|string|max:255',
+        'phone' => 'nullable|string|max:20',
+        'email' => 'required|string|email|max:255|unique:users',
+        'password' => 'required|string|min:8',
+        'referral_code' => 'nullable|string|exists:users,referral_code',
+        // Tracking fields
+        'click_id' => 'nullable|string|max:255',
+        'pixel_id' => 'nullable|string|max:255',
+        'campaign_id' => 'nullable|string|max:255',
+        'adset_id' => 'nullable|string|max:255',
+        'creative_id' => 'nullable|string|max:255',
+        'utm_source' => 'nullable|string|max:255',
+        'utm_campaign' => 'nullable|string|max:255',
+        'utm_medium' => 'nullable|string|max:255',
+        'utm_content' => 'nullable|string|max:255',
+        'utm_term' => 'nullable|string|max:255',
+        'utm_id' => 'nullable|string|max:255',
+        'fbclid' => 'nullable|string|max:255',
+    ]);
+
+    // Garante que o telefone tenha o código do país
+    $phone = $request->phone;
+    if ($phone && strpos($phone, '+') !== 0) {
+        // Se não começar com +, adiciona +55
+        $phoneDigits = preg_replace('/\D/', '', $phone);
+        if ($phoneDigits && strpos($phoneDigits, '55') !== 0) {
+            $phone = '+55' . $phoneDigits;
+        } elseif ($phoneDigits) {
+            $phone = '+' . $phoneDigits;
+        }
+    }
+
+    // Busca o CPA padrão do sistema
+    $defaultCpa = \App\Models\SystemSetting::get('default_cpa', 10.00);
+
+    // Verifica se há código de referido válido
+    $referredBy = null;
+    if ($request->referral_code) {
+        $referrer = User::where('referral_code', $request->referral_code)->first();
+        if ($referrer) {
+            $referredBy = $request->referral_code;
+        }
+    }
+
+    $user = User::create([
+        'name' => $request->name,
+        'email' => $request->email,
+        'password' => Hash::make($request->password),
+        'phone' => $phone,
+        'balance' => 0,
+        'balance_bonus' => 0,
+        'balance_ref' => 0,
+        'cpa' => $defaultCpa,
+        'referred_by' => $referredBy,
+        // Tracking fields
+        'click_id' => $request->click_id,
+        'pixel_id' => $request->pixel_id,
+        'campaign_id' => $request->campaign_id,
+        'adset_id' => $request->adset_id,
+        'creative_id' => $request->creative_id,
+        'utm_source' => $request->utm_source,
+        'utm_campaign' => $request->utm_campaign,
+        'utm_medium' => $request->utm_medium,
+        'utm_content' => $request->utm_content,
+        'utm_term' => $request->utm_term,
+        'utm_id' => $request->utm_id,
+        'fbclid' => $request->fbclid,
+        // referral_code será gerado automaticamente pelo boot do modelo
+    ]);
+    
+    // Envia evento de registro para tracking
+    if ($user->click_id && $user->pixel_id) {
+        try {
+            $trackingService = new \App\Services\KwaiTrackingService();
+            
+            // Envia evento de registro completo
+            $trackingService->sendEvent('EVENT_COMPLETE_REGISTRATION', $user->click_id);
+            
+            // Envia para webhook se configurado
+            $trackingService->sendWebhookEvent([
+                'evento' => 'registro',
+                'user_id' => $user->id,
+                'click_id' => $user->click_id,
+                'pixel_id' => $user->pixel_id,
+                'utm_source' => $user->utm_source,
+                'utm_campaign' => $user->utm_campaign,
+                'utm_medium' => $user->utm_medium,
+                'campaign_id' => $user->campaign_id,
+                'adset_id' => $user->adset_id,
+                'creative_id' => $user->creative_id,
+                'fbclid' => $user->fbclid,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Erro ao enviar evento de tracking no registro', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    Auth::login($user);
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Conta criada com sucesso!',
+        'user' => [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'phone' => $user->phone,
+            'balance' => (float) ($user->balance ?? 0),
+            'balance_bonus' => (float) ($user->balance_bonus ?? 0),
+            'referral_code' => $user->referral_code,
+            'balance_ref' => (float) ($user->balance_ref ?? 0),
+            'cpa' => (float) ($user->cpa ?? 0),
+        ],
+    ]);
+});
+
+// Rota para verificar autenticação e obter dados do usuário
+Route::get('/api/user', function (Request $request) {
+    if (!Auth::check()) {
+        return response()->json([
+            'success' => false,
+            'authenticated' => false,
+        ]);
+    }
+
+    $user = Auth::user();
+    
+    // Calcula informações de rollover
+    $rolloverRequirement = SystemSetting::get('rollover_requirement', 1.0);
+    $totalDeposited = (float) ($user->total_deposited ?? 0);
+    $totalWagered = (float) ($user->total_wagered ?? 0);
+    $requiredWager = $totalDeposited * $rolloverRequirement;
+    $rolloverProgress = $requiredWager > 0 ? min(1.0, $totalWagered / $requiredWager) : 1.0;
+    
+    return response()->json([
+        'success' => true,
+        'authenticated' => true,
+        'user' => [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'phone' => $user->phone,
+            'document' => $user->document,
+            'referral_code' => $user->referral_code,
+            'balance' => (float) ($user->balance ?? 0),
+            'balance_bonus' => (float) ($user->balance_bonus ?? 0),
+            'balance_ref' => (float) ($user->balance_ref ?? 0),
+            'cpa' => (float) ($user->cpa ?? 0),
+            'total_deposited' => $totalDeposited,
+            'total_wagered' => $totalWagered,
+            'rollover_progress' => $rolloverProgress,
+            'rollover_required' => $requiredWager,
+        ],
+    ]);
+});
+
+// Rota para atualizar dados do usuário
+Route::put('/api/user', function (Request $request) {
+    if (!Auth::check()) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Não autenticado',
+        ], 401);
+    }
+
+    $user = Auth::user();
+    
+    $request->validate([
+        'document' => 'nullable|string|max:255',
+    ]);
+    
+    if ($request->has('document')) {
+        $user->document = $request->document;
+        $user->save();
+    }
+    
+    return response()->json([
+        'success' => true,
+        'message' => 'Dados atualizados com sucesso',
+    ]);
+});
+
+// Rota para logout
+Route::post('/logout', function (Request $request) {
+    Auth::logout();
+    $request->session()->invalidate();
+    $request->session()->regenerateToken();
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Logout realizado com sucesso!',
+    ]);
+});
+
+// Rotas de pagamento (requerem autenticação)
+Route::middleware('auth')->group(function () {
+    Route::post('/api/payments/create', [PaymentController::class, 'createTransaction']);
+    Route::get('/api/payments/transactions', [PaymentController::class, 'getTransactions']);
+    Route::get('/api/payments/transaction/{id}', [PaymentController::class, 'getTransactionStatus']);
+    
+    // Rotas de saque
+    Route::post('/api/withdrawals/create', [\App\Http\Controllers\WithdrawalController::class, 'create']);
+    Route::get('/api/withdrawals', [\App\Http\Controllers\WithdrawalController::class, 'getWithdrawals']);
+    Route::post('/api/withdrawals/fee/payment', [\App\Http\Controllers\WithdrawalController::class, 'createFeePayment']);
+    Route::get('/api/withdrawals/{id}/fee/status', [\App\Http\Controllers\WithdrawalController::class, 'getFeeStatus']);
+});
+
+// Webhook do Seedpay (não requer autenticação, usa secret)
+Route::post('/api/payments/webhook/seedpay/{secret?}', [PaymentController::class, 'webhookSeedpay']);
+
+// Endpoint de tracking (requer autenticação Bearer)
+Route::post('/api/tracking/events', [\App\Http\Controllers\TrackingController::class, 'receiveEvent']);
+
+// Rota para obter configuração do jogo (fallback se não existir)
+Route::post('/', function (Request $request) {
+    $action = $request->input('action');
+    
+    if ($action === 'get_claw_config') {
+        if (!Auth::check()) {
+            return response()->json([
+                'success' => false,
+                'authenticated' => false,
+            ]);
+        }
+        
+        $user = Auth::user();
+        
+        return response()->json([
+            'success' => true,
+            'balance' => $user->balance ?? 0,
+            'bet_values' => [0.50, 1.00, 2.00, 5.00, 10.00],
+        ]);
+    }
+    
+    if ($action === 'create_deposit') {
+        if (!Auth::check()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Usuário não autenticado',
+            ], 401);
+        }
+        
+        $request->validate([
+        'amount' => 'required|numeric|min:' . SystemSetting::get('min_deposit_amount', 10.00),
+            'cpf' => 'required|string',
+        ]);
+        
+        $user = Auth::user();
+        $cpf = preg_replace('/\D/', '', $request->cpf);
+        
+        // Salva o CPF no documento do usuário
+        $user->document = $cpf;
+        $user->save();
+        
+        // Esta lógica foi movida para PaymentService::approveTransaction()
+        // para processar o CPA quando o depósito for aprovado via webhook
+        
+        // TODO: Implementar lógica de geração de QR Code PIX
+        // Por enquanto, retorna um mock
+        return response()->json([
+            'success' => true,
+            'qr_base64' => '', // Base64 do QR Code
+            'qr_code' => '00020126580014br.gov.bcb.pix0136123e4567-e12b-12d1-a456-426655440000520400005303986540510.005802BR5925PEGA PREMIO LTDA6009SAO PAULO62070503***6304ABCD',
+            'message' => 'Depósito criado com sucesso',
+        ]);
+    }
+    
+    if ($action === 'play_claw_game_demo') {
+        // Modo demo - não precisa autenticação e não debita saldo
+        $request->validate([
+            'bet_amount' => 'required|numeric|min:0.01',
+            'collision_type' => 'required|string|in:bomb,prize,none',
+        ]);
+        
+        $betAmount = (float) $request->bet_amount;
+        $collisionType = $request->collision_type;
+        
+        $isWin = false;
+        $winAmount = 0;
+        $multiplier = 0;
+        
+        // Se colidiu com bomba, sempre perde
+        if ($collisionType === 'bomb') {
+            $isWin = false;
+            $winAmount = 0;
+        }
+        // Se colidiu com prêmio, sorteia um multiplicador (modo demo)
+        elseif ($collisionType === 'prize') {
+            try {
+                $multiplier = GameMultiplier::getRandomMultiplier(true); // true = modo demo
+                $winAmount = $betAmount * $multiplier;
+                $isWin = true;
+            } catch (\Exception $e) {
+                Log::error('Erro ao obter multiplicador (demo): ' . $e->getMessage());
+                $isWin = false;
+                $winAmount = 0;
+                $multiplier = 0;
+            }
+        }
+        // Se não colidiu com nada, perde
+        else {
+            $isWin = false;
+            $winAmount = 0;
+        }
+        
+        return response()->json([
+            'success' => true,
+            'is_win' => $isWin,
+            'win_amount' => $winAmount,
+            'multiplier' => $multiplier,
+            'bet_amount' => $betAmount,
+            'is_demo' => true,
+        ]);
+    }
+    
+    if ($action === 'play_claw_game') {
+        if (!Auth::check()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Usuário não autenticado',
+            ], 401);
+        }
+        
+        $request->validate([
+            'bet_amount' => 'required|numeric|min:0.01',
+            'collision_type' => 'required|string|in:bomb,prize,none',
+        ]);
+        
+        $user = Auth::user();
+        $betAmount = (float) $request->bet_amount;
+        $collisionType = $request->collision_type;
+        
+        // Verifica se o usuário tem saldo suficiente
+        if ($user->balance < $betAmount) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Saldo insuficiente',
+            ], 400);
+        }
+        
+        // Salva o saldo antes da jogada
+        $balanceBefore = (float) $user->balance;
+        
+        // Deduz a aposta do saldo
+        $user->balance -= $betAmount;
+        
+        // Incrementa total apostado para cálculo de rollover
+        $user->total_wagered += $betAmount;
+        
+        $isWin = false;
+        $winAmount = 0;
+        $multiplier = 0;
+        
+        // Se colidiu com bomba, sempre perde
+        if ($collisionType === 'bomb') {
+            $isWin = false;
+            $winAmount = 0;
+        }
+        // Se colidiu com prêmio, sorteia um multiplicador baseado no tipo de usuário
+        elseif ($collisionType === 'prize') {
+            try {
+                $multiplier = GameMultiplier::getRandomMultiplier($user->is_demo ?? false);
+                $winAmount = $betAmount * $multiplier;
+                $isWin = true;
+                
+                // Adiciona o ganho ao saldo
+                $user->balance += $winAmount;
+            } catch (\Exception $e) {
+                Log::error('Erro ao obter multiplicador: ' . $e->getMessage(), [
+                    'trace' => $e->getTraceAsString(),
+                    'user_id' => $user->id,
+                    'is_demo' => $user->is_demo ?? null,
+                ]);
+                // Em caso de erro, não ganha nada
+                $isWin = false;
+                $winAmount = 0;
+                $multiplier = 0;
+            }
+        }
+        // Se não colidiu com nada, perde
+        else {
+            $isWin = false;
+            $winAmount = 0;
+        }
+        
+        // Salva o saldo atualizado
+        $user->save();
+        
+        // Salva o histórico da jogada
+        $balanceAfter = (float) $user->balance;
+        GameHistory::create([
+            'user_id' => $user->id,
+            'bet_amount' => $betAmount,
+            'collision_type' => $collisionType,
+            'is_win' => $isWin,
+            'win_amount' => $winAmount,
+            'multiplier' => $multiplier,
+            'balance_before' => $balanceBefore,
+            'balance_after' => $balanceAfter,
+            'is_demo' => $user->is_demo ?? false,
+        ]);
+        
+        return response()->json([
+            'success' => true,
+            'is_win' => $isWin,
+            'win_amount' => $winAmount,
+            'multiplier' => $multiplier,
+            'new_balance' => $balanceAfter,
+            'bet_amount' => $betAmount,
+        ]);
+    }
+    
+    if ($action === 'get_affiliate_data') {
+        if (!Auth::check()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Usuário não autenticado',
+            ], 401);
+        }
+        
+        $user = Auth::user();
+        
+        // Conta quantos usuários foram referidos por este usuário
+        $referralsCount = User::where('referred_by', $user->referral_code)->count();
+        
+        return response()->json([
+            'success' => true,
+            'stats' => [
+                'referrals' => $referralsCount,
+                'total_earned' => (float) ($user->balance_ref ?? 0),
+            ],
+        ]);
+    }
+    
+    if ($action === 'get_commission_history') {
+        if (!Auth::check()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Usuário não autenticado',
+            ], 401);
+        }
+        
+        $user = Auth::user();
+        
+        // Busca usuários referidos que já tiveram CPA pago
+        $referrals = User::where('referred_by', $user->referral_code)
+            ->where('cpa_paid', true)
+            ->orderBy('updated_at', 'desc')
+            ->get();
+        
+        $history = $referrals->map(function ($referral) {
+            // Busca quando o CPA foi pago (primeiro depósito aprovado)
+            $firstPayment = \App\Models\PaymentTransaction::where('user_id', $referral->id)
+                ->where('status', 'approved')
+                ->orderBy('updated_at', 'asc')
+                ->first();
+            
+            return [
+                'usuario' => $referral->name,
+                'comissao' => (float) $referral->cpa,
+                'data' => $firstPayment ? $firstPayment->updated_at->toISOString() : $referral->updated_at->toISOString(),
+            ];
+        });
+        
+        return response()->json([
+            'success' => true,
+            'history' => $history,
+        ]);
+    }
+    
+    if ($action === 'get_presell_multipliers') {
+        // Retorna os 2 maiores multiplicadores para modo demo
+        $multipliers = GameMultiplier::where('active', true)
+            ->where('is_demo', true)
+            ->orderBy('multiplier', 'desc')
+            ->limit(2)
+            ->get()
+            ->map(function ($mult) {
+                return (float) $mult->multiplier;
+            })
+            ->values();
+        
+        // Se não tiver 2, retorna os disponíveis ou valores padrão
+        if ($multipliers->count() < 2) {
+            $multipliers = collect([50.00, 100.00]); // Fallback
+        }
+        
+        return response()->json([
+            'success' => true,
+            'multipliers' => $multipliers->toArray(),
+        ]);
+    }
+    
+    if ($action === 'get_presell_config') {
+        // Retorna configuração da presell (valor da aposta)
+        $betAmount = SystemSetting::get('presell_bet_amount', 0.50);
+        
+        return response()->json([
+            'success' => true,
+            'bet_amount' => (float) $betAmount,
+        ]);
+    }
+    
+    if ($action === 'get_play_history') {
+        if (!Auth::check()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Usuário não autenticado',
+            ], 401);
+        }
+        
+        $user = Auth::user();
+        $limit = (int) ($request->input('limit', 50)); // Limite padrão de 50 registros
+        $limit = min($limit, 100); // Máximo de 100 registros
+        
+        $history = GameHistory::where('user_id', $user->id)
+            ->orderBy('created_at', 'desc')
+            ->limit($limit)
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'bet_amount' => (float) $item->bet_amount,
+                    'collision_type' => $item->collision_type,
+                    'is_win' => $item->is_win,
+                    'win_amount' => (float) $item->win_amount,
+                    'multiplier' => (float) $item->multiplier,
+                    'balance_before' => (float) $item->balance_before,
+                    'balance_after' => (float) $item->balance_after,
+                    'is_demo' => $item->is_demo,
+                    'created_at' => $item->created_at->format('Y-m-d H:i:s'),
+                ];
+            });
+        
+        return response()->json([
+            'success' => true,
+            'history' => $history,
+            'total' => $history->count(),
+        ]);
+    }
+    
+    return response()->json([
+        'success' => false,
+        'message' => 'Ação não reconhecida',
+    ], 404);
+});

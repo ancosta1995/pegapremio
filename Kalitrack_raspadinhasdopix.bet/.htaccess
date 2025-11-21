@@ -1,0 +1,43 @@
+# Configurações PHP básicas e compatíveis
+<IfModule mod_php.c>
+  php_flag display_errors Off
+  php_value max_execution_time 300
+  php_value max_input_time 300
+  php_value max_input_vars 1000
+  php_value memory_limit 512M
+  php_value post_max_size 512M
+  php_value upload_max_filesize 512M
+  php_value session.gc_maxlifetime 86400
+  php_flag zlib.output_compression Off
+</IfModule>
+
+# Para servidores com suporte a múltiplas versões PHP (cPanel/LiteSpeed)
+<IfModule lsapi_module>
+  php_flag display_errors Off
+  php_value max_execution_time 300
+  php_value max_input_time 300
+  php_value max_input_vars 1000
+  php_value memory_limit 512M
+  php_value post_max_size 512M
+  php_value upload_max_filesize 512M
+  php_value session.gc_maxlifetime 86400
+  php_flag zlib.output_compression Off
+</IfModule>
+
+# Headers para APIs e CORS
+<IfModule mod_headers.c>
+  Header always set Access-Control-Allow-Origin "*"
+  Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+  Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+  Header always set Access-Control-Allow-Credentials "true"
+</IfModule>
+
+# Passar headers de autorização para PHP
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTP:Authorization} ^(.*)$
+  RewriteRule ^ - [E=HTTP_AUTHORIZATION:%1]
+</IfModule>
+
+# Para servidores LiteSpeed/LSAPI
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1

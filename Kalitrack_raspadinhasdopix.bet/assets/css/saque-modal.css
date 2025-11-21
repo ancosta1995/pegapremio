@@ -1,0 +1,460 @@
+/* Modal de Sucesso do Saque */
+.saque-success-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+    backdrop-filter: blur(8px);
+    padding: 20px;
+}
+
+.saque-success-content {
+    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+    border: 1px solid #404040;
+    border-radius: 20px;
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.8);
+    overflow: hidden;
+    max-width: 500px;
+    width: 100%;
+    animation: slideUp 0.4s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.saque-success-header {
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+    padding: 32px 24px 24px;
+    text-align: center;
+    position: relative;
+}
+
+.saque-success-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 32px;
+    height: 32px;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 8px;
+    color: white;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.saque-success-icon {
+    width: 60px;
+    height: 60px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+    font-size: 30px;
+}
+
+.saque-success-title {
+    color: #fff;
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+
+.saque-success-subtitle {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 16px;
+}
+
+.saque-success-body {
+    padding: 32px 24px;
+}
+
+.saque-value-display {
+    text-align: center;
+    background: rgba(76, 175, 80, 0.1);
+    border: 1px solid rgba(76, 175, 80, 0.2);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+}
+
+.saque-value-label {
+    color: #aaa;
+    font-size: 14px;
+    margin-bottom: 8px;
+}
+
+.saque-value-amount {
+    color: #4CAF50;
+    font-size: 32px;
+    font-weight: 800;
+}
+
+.taxa-warning {
+    background: rgba(255, 193, 7, 0.1);
+    border: 1px solid rgba(255, 193, 7, 0.3);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+}
+
+.taxa-warning-title {
+    color: #FFC107;
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.taxa-warning-text {
+    color: #fff;
+    font-size: 15px;
+    line-height: 1.6;
+    margin-bottom: 16px;
+}
+
+.taxa-value {
+    color: #FFC107;
+    font-size: 24px;
+    font-weight: 700;
+    text-align: center;
+    background: rgba(255, 193, 7, 0.1);
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 193, 7, 0.2);
+}
+
+.pagar-taxa-btn {
+    width: 100%;
+    padding: 18px 24px;
+    background: linear-gradient(90deg, #FFC107, #FFB300);
+    border: none;
+    border-radius: 12px;
+    color: #1a1a1a;
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-bottom: 16px;
+    box-shadow: 0 6px 20px rgba(255, 193, 7, 0.2);
+}
+
+.pagar-taxa-btn:hover {
+    background: linear-gradient(90deg, #FFB300, #FFA000);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(255, 193, 7, 0.3);
+}
+
+.pagar-taxa-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.skip-taxa-btn {
+    width: 100%;
+    padding: 12px 24px;
+    background: transparent;
+    border: 1px solid #666;
+    border-radius: 8px;
+    color: #aaa;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.skip-taxa-btn:hover {
+    border-color: #999;
+    color: #fff;
+}
+
+/* QR Code Modal para Taxa */
+.taxa-qr-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: none;
+    justify-content: center;
+    align-items: flex-start;
+    z-index: 3000;
+    backdrop-filter: blur(8px);
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.taxa-qr-content {
+    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+    border: 1px solid #404040;
+    border-radius: 20px;
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.8);
+    overflow: hidden;
+    max-width: 500px;
+    width: 100%;
+    margin: 40px auto;
+    animation: slideUp 0.4s ease-out;
+}
+
+.taxa-qr-header {
+    background: linear-gradient(135deg, #FFC107 0%, #FFB300 100%);
+    padding: 32px 24px 24px;
+    text-align: center;
+    position: relative;
+}
+
+.taxa-qr-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 32px;
+    height: 32px;
+    background: rgba(0, 0, 0, 0.1);
+    border: none;
+    border-radius: 8px;
+    color: #1a1a1a;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.taxa-qr-icon {
+    width: 40px;
+    height: 40px;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+    font-size: 24px;
+}
+
+.taxa-qr-title {
+    color: #1a1a1a;
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.taxa-qr-body {
+    padding: 32px 24px;
+}
+
+.taxa-qr-value {
+    text-align: center;
+    color: #FFC107;
+    font-size: 32px;
+    font-weight: 800;
+    margin-bottom: 32px;
+}
+
+.taxa-qr-label {
+    color: #a0a0a0;
+    font-size: 14px;
+    text-align: center;
+    margin-bottom: 12px;
+}
+
+.taxa-qr-input-group {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.taxa-qr-input {
+    width: 100%;
+    padding: 16px 50px 16px 20px;
+    background: #374151;
+    border: 1px solid #4b5563;
+    border-radius: 10px;
+    color: #fff;
+    font-size: 12px;
+    text-align: center;
+    outline: none;
+    word-break: break-all;
+}
+
+.taxa-qr-copy-icon {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255, 255, 255, 0.08);
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.taxa-qr-copy-btn {
+    width: 100%;
+    padding: 16px;
+    background: linear-gradient(135deg, #FFC107 0%, #FFB300 100%);
+    border: none;
+    border-radius: 10px;
+    color: #1a1a1a;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 24px;
+}
+
+.taxa-qr-timer {
+    background: rgba(255, 193, 7, 0.1);
+    border: 1px solid rgba(255, 193, 7, 0.2);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.taxa-qr-timer-title {
+    color: #FFC107;
+    font-size: 14px;
+    margin-bottom: 8px;
+}
+
+.taxa-qr-timer-value {
+    color: #fff;
+    font-size: 24px;
+    font-weight: 800;
+    margin-bottom: 12px;
+}
+
+.taxa-qr-progress {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 193, 7, 0.2);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.taxa-qr-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #FFC107, #FFB300);
+    border-radius: 3px;
+    transition: width 1s ease;
+}
+
+.taxa-qr-status {
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.taxa-qr-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 193, 7, 0.1);
+    border: 1px solid rgba(255, 193, 7, 0.2);
+    border-radius: 20px;
+    padding: 8px 16px;
+}
+
+.taxa-qr-pulse {
+    width: 8px;
+    height: 8px;
+    background: #FFC107;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.taxa-qr-status-text {
+    color: #FFC107;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.taxa-qr-code-display {
+    background: #fff;
+    border-radius: 16px;
+    padding: 24px;
+    text-align: center;
+}
+
+.taxa-qr-code-title {
+    color: #FFC107;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 16px;
+}
+
+.taxa-qr-code-image {
+    width: 200px;
+    height: 200px;
+    background: #f0f0f0;
+    border-radius: 12px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 60px;
+    color: #666;
+    overflow: hidden;
+}
+
+.taxa-qr-code-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+    .saque-success-content,
+    .taxa-qr-content {
+        margin: 20px auto;
+        max-width: 95%;
+    }
+
+    .saque-success-header,
+    .taxa-qr-header {
+        padding: 24px 20px 20px;
+    }
+
+    .saque-success-body,
+    .taxa-qr-body {
+        padding: 24px 20px;
+    }
+
+    .saque-value-amount {
+        font-size: 28px;
+    }
+
+    .taxa-qr-value {
+        font-size: 28px;
+        margin-bottom: 24px;
+    }
+
+    .taxa-qr-code-image {
+        width: 160px;
+        height: 160px;
+        font-size: 50px;
+    }
+}
