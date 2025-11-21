@@ -42,19 +42,6 @@
                         </div>
                     </div>
 
-                    <div class="form-group">
-                        <label class="label">CPF</label>
-                        <input
-                            type="text"
-                            class="form-input"
-                            v-model="cpf"
-                            placeholder="000.000.000-00"
-                            @input="formatCPF"
-                            maxlength="14"
-                            required
-                        />
-                    </div>
-
                     <div class="deposit-info">
                         <div class="info-item">
                             <span class="info-icon">⚡</span>
@@ -69,7 +56,7 @@
                     <button
                         type="submit"
                         class="modal-button deposit-button"
-                        :disabled="loading || !amount || !cpf"
+                        :disabled="loading || !amount"
                     >
                         <span v-if="!loading">🎄 Gerar PIX</span>
                         <span v-else>⏳ Gerando...</span>
@@ -90,7 +77,6 @@
                             <span>📋</span> Copiar Código PIX
                         </button>
                     </div>
-                    <button class="modal-button" @click="closeModal">Fechar</button>
                 </div>
             </div>
         </div>
@@ -98,13 +84,12 @@
 </template>
 
 <script>
-import { ref, onMounted } from 'vue';
+import { ref } from 'vue';
 
 export default {
     name: 'DepositModal',
     setup(props, { emit }) {
         const amount = ref('');
-        const cpf = ref('');
         const loading = ref(false);
         const showQrCode = ref(false);
         const qrCodeImage = ref('');
@@ -112,25 +97,6 @@ export default {
         const quickAmounts = ref([10, 25, 50, 100, 200, 500]);
         const transactionId = ref(null);
         const statusCheckInterval = ref(null);
-
-        // Carrega o CPF salvo do usuário ao abrir o modal
-        onMounted(async () => {
-            try {
-                const response = await fetch('/api/user');
-                const data = await response.json();
-                if (data.success && data.user && data.user.document) {
-                    // Formata o CPF se existir
-                    const document = data.user.document.replace(/\D/g, '');
-                    if (document.length === 11) {
-                        cpf.value = document.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-                    } else {
-                        cpf.value = data.user.document;
-                    }
-                }
-            } catch (error) {
-                console.error('Erro ao carregar dados do usuário:', error);
-            }
-        });
 
         // Obtém o token CSRF
         const getCsrfToken = () => {
@@ -155,16 +121,6 @@ export default {
             amount.value = formatAmountValue(value);
         };
 
-        const formatCPF = (event) => {
-            let value = event.target.value.replace(/\D/g, '');
-            if (value.length <= 11) {
-                value = value.replace(/(\d{3})(\d)/, '$1.$2');
-                value = value.replace(/(\d{3})(\d)/, '$1.$2');
-                value = value.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-                cpf.value = value;
-            }
-        };
-
         const getAmountAsNumber = () => {
             return parseFloat(amount.value.replace(/\./g, '').replace(',', '.')) || 0;
         };
@@ -173,9 +129,8 @@ export default {
             loading.value = true;
             try {
                 const amountValue = getAmountAsNumber();
-                const cpfValue = cpf.value.replace(/\D/g, '');
                 
-                // Cria a transação de pagamento (o CPF será atualizado automaticamente no backend)
+                // Cria a transação de pagamento
                 const response = await fetch('/api/payments/create', {
                     method: 'POST',
                     headers: {
@@ -185,7 +140,6 @@ export default {
                     body: JSON.stringify({
                         amount: amountValue,
                         payment_method: 'PIX',
-                        document: cpfValue,
                     }),
                 });
                 
@@ -323,14 +277,12 @@ export default {
             
             showQrCode.value = false;
             amount.value = '';
-            cpf.value = '';
             transactionId.value = null;
             emit('close');
         };
 
         return {
             amount,
-            cpf,
             loading,
             showQrCode,
             qrCodeImage,
@@ -339,7 +291,6 @@ export default {
             formatAmount,
             formatAmountValue,
             selectAmount,
-            formatCPF,
             generatePayment,
             copyPix,
             closeModal,
@@ -469,57 +420,58 @@ export default {
 }
 
 .qr-header {
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem;
 }
 
 .qr-icon {
-    font-size: 2rem;
-    margin-bottom: 0.25rem;
+    font-size: 1.5rem;
+    margin-bottom: 0.2rem;
 }
 
 .qr-header h4 {
-    margin: 0.25rem 0;
+    margin: 0.2rem 0;
     color: var(--cor-texto);
-    font-size: 1rem;
+    font-size: 0.9rem;
 }
 
 .qr-header p {
     margin: 0;
     color: var(--cor-texto-secundaria);
-    font-size: 0.8rem;
+    font-size: 0.75rem;
 }
 
 .qr-code-wrapper {
     background: white;
-    padding: 0.75rem;
+    padding: 0.5rem;
     border-radius: 8px;
     display: inline-block;
-    margin: 1rem 0;
+    margin: 0.75rem 0;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
 .qr-code-wrapper img {
-    max-width: 200px;
+    max-width: 180px;
     width: 100%;
     height: auto;
     display: block;
 }
 
 .pix-code-wrapper {
-    margin: 1rem 0;
+    margin: 0.5rem 0;
 }
 
 .pix-code {
     background: var(--cor-fundo-input);
     border: 1px solid #444;
     border-radius: 6px;
-    padding: 0.75rem;
+    padding: 0.4rem 0.5rem;
     word-break: break-all;
     color: var(--cor-texto);
-    font-size: 0.75rem;
-    margin-bottom: 0.75rem;
+    font-size: 0.65rem;
+    margin-bottom: 0.4rem;
     text-align: left;
     font-family: monospace;
+    line-height: 1.3;
 }
 
 .copy-pix-btn {
