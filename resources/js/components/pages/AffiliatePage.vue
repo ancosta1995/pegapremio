@@ -71,6 +71,7 @@
 
 <script>
 import { ref, onMounted, watch, computed } from 'vue';
+import { useApi } from '../../composables/useApi.js';
 
 export default {
     name: 'AffiliatePage',
@@ -89,6 +90,8 @@ export default {
         },
     },
     setup(props) {
+        const { internalApiRequest } = useApi();
+        
         const activeTab = ref('stats');
         const affiliateStats = ref({
             totalEarned: 0,
@@ -103,23 +106,6 @@ export default {
         });
         const commissionHistory = ref([]);
         const commissionHistoryLoading = ref(false);
-
-        const internalApiRequest = async (action, data = {}) => {
-            const params = new URLSearchParams();
-            params.append('action', action);
-            for (const key in data) {
-                params.append(key, data[key]);
-            }
-            const response = await fetch('', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: params,
-            });
-            if (!response.ok) {
-                throw new Error('Erro de rede.');
-            }
-            return response.json();
-        };
 
         const formatAmount = (value) => {
             return parseFloat(value).toFixed(2).replace('.', ',');

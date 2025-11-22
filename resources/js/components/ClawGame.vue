@@ -206,6 +206,7 @@
                 @withdraw="openWithdrawModal"
                 @pay-priority="handlePayPriorityFromHistory"
                 @reopen-fee-payment="handleReopenFeePayment"
+                @pending-fees-count="handlePendingFeesCount"
             />
 
             <!-- Affiliate Page -->
@@ -232,7 +233,7 @@
                 <span>Pegar</span>
             </button>
             <button
-                class="nav-btn"
+                class="nav-btn nav-btn-with-badge"
                 :class="{ active: currentPage === 'wallet' }"
                 @click="navigateTo('wallet')"
             >
@@ -240,6 +241,7 @@
                     <path d="M21 4H3C1.9 4 1 4.9 1 6v12c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-1 14H4c-.55 0-1-.45-1-1V7h18v10c0 .55-.45 1-1 1zm-1-8H5v2h14v-2zM4 6h16v1H4z"/>
                 </svg>
                 <span>Carteira</span>
+                <span v-if="pendingFeesCount > 0" class="nav-badge">{{ pendingFeesCount > 9 ? '9+' : pendingFeesCount }}</span>
             </button>
             <button
                 class="nav-btn"
@@ -345,7 +347,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import WinModal from './modals/WinModal.vue';
 import PresellWinModal from './modals/PresellWinModal.vue';
 import LossModal from './modals/LossModal.vue';
@@ -360,6 +362,13 @@ import WelcomeModal from './modals/WelcomeModal.vue';
 import ProfilePage from './pages/ProfilePage.vue';
 import WalletPage from './pages/WalletPage.vue';
 import AffiliatePage from './pages/AffiliatePage.vue';
+import { useApi } from '../composables/useApi.js';
+import { useNavigation } from '../composables/useNavigation.js';
+import { useModals } from '../composables/useModals.js';
+import { useUserAuth } from '../composables/useUserAuth.js';
+import { useWithdrawals } from '../composables/useWithdrawals.js';
+import { usePresell } from '../composables/usePresell.js';
+import { useGameLogic } from '../composables/useGameLogic.js';
 
 export default {
     name: 'ClawGame',
@@ -380,13 +389,10 @@ export default {
         AffiliatePage,
     },
     setup() {
-        // Helper para caminhos de assets
-        const asset = (path) => {
-            const baseUrl = window.ASSETS_BASE_URL || '';
-            return baseUrl + (path.startsWith('/') ? path.substring(1) : path);
-        };
-
-        // Refs
+        // Inicializa composables
+        const { internalApiRequest, formatBalance, formatBet, formatTime, asset } = useApi();
+        
+        // Refs do DOM
         const gameArea = ref(null);
         const clawPivot = ref(null);
         const clawRope = ref(null);
@@ -395,394 +401,129 @@ export default {
         const winSound = ref(null);
         const lossSound = ref(null);
         const itemElements = ref([]);
-
-        // State
-        const currentPage = ref('game'); // 'game', 'profile', 'wallet', 'affiliate'
         
-        // Modo presell (demo grátis)
-        const isPresellMode = ref(window.PRESELL_MODE === true);
+        // Inicializa modais
+        const modals = useModals();
+        const { 
+            showWinModal, showPresellWinModal, showLossModal, showDepositModal, showWithdrawModal,
+            showWithdrawalFeeModal, showWithdrawalFeePaymentModal, showWithdrawalQueueModal,
+            showLoginModal, showRegisterModal, showWelcomeModal
+        } = modals;
         
-        // Mapeamento de rotas
-        const routeMap = {
-            '/': 'game',
-            '/perfil': 'profile',
-            '/carteira': 'wallet',
-            '/afiliados': 'affiliate',
-        };
+        // Inicializa presell (precisa vir antes de navigation e userAuth)
+        const presell = usePresell(internalApiRequest, asset);
+        const { isPresellMode, presellBetAmount, presellFreeRounds, presellRoundsPlayed, presellMultipliers, presellLoading, presellFakeBalance, startPresellTour: startPresellTourFromComposable, loadPresellConfig } = presell;
         
-        // Mapeamento reverso (página -> rota)
-        const pageToRoute = {
-            'game': '/',
-            'profile': '/perfil',
-            'wallet': '/carteira',
-            'affiliate': '/afiliados',
-        };
-        const isUserLoggedIn = ref(false);
-        const username = ref('');
-        const userEmail = ref('');
-        const userPhone = ref('');
-        const balance = ref(0);
-        const balanceBonus = ref(0);
-        const userBalanceRef = ref(0);
-        const userReferralCode = ref('');
-        const userCpa = ref(0);
+        // Inicializa autenticação
+        const userAuth = useUserAuth(internalApiRequest);
+        const { isUserLoggedIn, username, userEmail, userPhone, balance, balanceBonus, userBalanceRef, userReferralCode, userCpa, checkAuthentication, handleLoggedIn: handleLoggedInAuth, handleRegistered: handleRegisteredAuth, handleLogout } = userAuth;
+        
+        // Inicializa navegação (precisa do isUserLoggedIn)
+        const navigation = useNavigation(isUserLoggedIn);
+        const { currentPage, initializeRoute, handlePopState, pageToRoute, getPageFromRoute } = navigation;
+        
+        // Inicializa saques
+        const withdrawals = useWithdrawals(internalApiRequest, modals);
+        const { 
+            currentWithdrawalId, currentFeeAmount, isPriorityFee, currentQueuePosition, 
+            canPayPriority, priorityFeeAmount, priorityFeePaid, pendingFeesCount,
+            loadPendingFeesCount
+        } = withdrawals;
+        
+        // Estados do jogo
         const betLevels = ref([0.50, 1.00, 2.00, 5.00, 10.00]);
-        // Em modo presell, valor configurável do backend
-        const presellBetAmount = ref(null); // null até carregar do backend
-        const presellFreeRounds = ref(3); // Quantidade de rodadas grátis
-        const presellRoundsPlayed = ref(0); // Contador de rodadas jogadas
-        const presellMultipliers = ref([50.00, 100.00]); // 2 maiores multiplicadores
-        const presellLoading = ref(true); // Estado de loading
         const currentBetIndex = ref(0);
-        const isPlaying = ref(false);
-        const playButtonText = ref('PEGAR');
         const activeTab = ref('bet');
         const playHistory = ref([]);
         const historyLoading = ref(false);
-
-        // Game state
-        const items = ref([]);
-        const clawRotation = ref(0);
-        const isRopeStretching = ref(false);
-        let itemsAnimationId = null;
-        let swayAnimationId = null;
-
-        // Modals
-        const showWinModal = ref(false);
-        const showPresellWinModal = ref(false);
-        const showLossModal = ref(false);
-        const showDepositModal = ref(false);
-        const showWithdrawModal = ref(false);
-        const showWithdrawalFeeModal = ref(false);
-        const showWithdrawalFeePaymentModal = ref(false);
-        const showWithdrawalQueueModal = ref(false);
-        const currentWithdrawalId = ref(null);
-        const currentFeeAmount = ref(0);
-        const isPriorityFee = ref(false);
-        const currentQueuePosition = ref(0);
-        const canPayPriority = ref(false);
-        const priorityFeeAmount = ref(0);
-        const priorityFeePaid = ref(false);
-        const showLoginModal = ref(false);
-        const showRegisterModal = ref(false);
-        const showWelcomeModal = ref(false);
-        const justRegistered = ref(false); // Flag para detectar registro recente
         const winAmount = ref(0);
-        let currentTour = null; // Referência ao tour ativo
         const winMultiplier = ref(0);
-        const hasHookLeft = ref(true); // Pode ser verificado dinamicamente se necessário
-
+        let currentTour = null; // Referência ao tour ativo
+        
         const prizeImages = ref([
             asset('assets/prize1.png'),
             asset('assets/prize1.png'),
             asset('assets/prize1.png'),
             asset('assets/prize1.png'),
         ]);
-
-        // API Helper
-        const internalApiRequest = async (action, data = {}) => {
-            // Se for uma URL completa (começa com /), faz fetch direto
-            if (typeof action === 'string' && action.startsWith('/')) {
-                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-                
-                const options = {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': csrfToken,
-                    },
-                    credentials: 'same-origin',
-                };
-                
-                // Se tiver data, muda para POST
-                if (Object.keys(data).length > 0) {
-                    options.method = 'POST';
-                    options.headers['Content-Type'] = 'application/json';
-                    options.body = JSON.stringify(data);
-                }
-                
-                const response = await fetch(action, options);
-                
-                if (!response.ok) {
-                    if (response.status === 419) {
-                        window.location.reload();
-                        throw new Error('Sessão expirada. Recarregando...');
-                    }
-                    const errorData = await response.json().catch(() => ({}));
-                    throw new Error(errorData.message || 'Erro de rede.');
-                }
-                return response.json();
-            }
-            
-            // Sistema antigo (POST com action)
-            const params = new URLSearchParams();
-            params.append('action', action);
-            for (const key in data) {
-                params.append(key, data[key]);
-            }
-            
-            // Obtém o token CSRF
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-            
-            const response = await fetch('', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-CSRF-TOKEN': csrfToken,
-                },
-                body: params,
-            });
-            
-            if (!response.ok) {
-                // Se for erro 419, tenta obter um novo token CSRF
-                if (response.status === 419) {
-                    // Recarrega a página para obter um novo token
-                    window.location.reload();
-                    throw new Error('Sessão expirada. Recarregando...');
-                }
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.message || 'Erro de rede.');
-            }
-            return response.json();
-        };
-
-        // Format helpers
-        const formatBalance = (value) => {
-            return parseFloat(value).toFixed(2).replace('.', ',');
-        };
-
-        const formatBet = (value) => {
-            return parseFloat(value).toFixed(2).replace('.', ',');
-        };
-
-        const formatTime = (dateString) => {
-            return new Date(dateString).toLocaleTimeString('pt-BR');
-        };
-
-        // Game functions
-        const createItems = () => {
-            if (!gameArea.value) {
-                // Se o gameArea ainda não está disponível, tenta novamente depois
-                setTimeout(createItems, 100);
-                return;
-            }
-            
-            // Clear existing items
-            items.value = [];
-            itemElements.value = [];
-
-            const itemsCount = 7 + Math.floor(Math.random() * 4);
-            const gameRect = gameArea.value.getBoundingClientRect();
-            
-            // Se o gameArea ainda não tem dimensões, tenta novamente
-            if (gameRect.width === 0 || gameRect.height === 0) {
-                setTimeout(createItems, 100);
-                return;
-            }
-
-            const currentPrizeSrc = prizeImages.value[currentBetIndex.value % prizeImages.value.length];
-
-            for (let i = 0; i < itemsCount; i++) {
-                const isBomb = i % 3 === 0;
-                items.value.push({
-                    src: isBomb ? asset('assets/bomb1.png') : currentPrizeSrc,
-                    x: Math.random() * (gameRect.width - 48),
-                    y: (gameRect.height * 0.4) + (Math.random() * (gameRect.height * 0.5 - 48)),
-                    vx: (Math.random() - 0.5) * 1.5,
-                    vy: (Math.random() - 0.5) * 1.5,
-                    exploding: false,
+        
+        // Helper functions para toasts natalinos (precisam estar antes de useGameLogic)
+        const showSuccessToast = (message) => {
+            if (window.Notiflix) {
+                window.Notiflix.Notify.success(`🎄 ${message}`, {
+                    position: 'right-top',
+                    timeout: 4000,
+                    distance: '20px',
+                    borderRadius: '12px',
+                    fontFamily: 'Onest, sans-serif',
                 });
             }
         };
 
-        const animateItems = () => {
-            if (itemsAnimationId) cancelAnimationFrame(itemsAnimationId);
-            
-            const gameRect = gameArea.value?.getBoundingClientRect();
-            if (!gameRect || gameRect.width === 0) {
-                itemsAnimationId = requestAnimationFrame(animateItems);
-                return;
-            }
-
-            items.value.forEach((item) => {
-                item.x += item.vx;
-                item.y += item.vy;
-
-                if (item.x <= 0 || item.x >= gameRect.width - 48) {
-                    item.vx *= -1;
-                    item.x = Math.max(0, Math.min(item.x, gameRect.width - 48));
-                }
-                if (item.y <= gameRect.height * 0.25 || item.y >= gameRect.height - 48) {
-                    item.vy *= -1;
-                    item.y = Math.max(gameRect.height * 0.25, Math.min(item.y, gameRect.height - 48));
-                }
-            });
-
-            itemsAnimationId = requestAnimationFrame(animateItems);
-        };
-
-        const moveClawSway = () => {
-            if (!clawPivot.value) return;
-            const time = Date.now() / 800;
-            clawRotation.value = 18 * Math.sin(time);
-            swayAnimationId = requestAnimationFrame(moveClawSway);
-        };
-
-        const triggerConfetti = () => {
-            if (!confettiContainer.value) return;
-            for (let i = 0; i < 50; i++) {
-                const confetti = document.createElement('div');
-                confetti.className = 'confetti-piece';
-                confetti.style.left = `${Math.random() * 100}vw`;
-                confetti.style.animationDelay = `${Math.random() * 2}s`;
-                confetti.style.backgroundColor = `hsl(${Math.random() * 360}, 100%, 50%)`;
-                confettiContainer.value.appendChild(confetti);
-                setTimeout(() => confetti.remove(), 4000);
+        const showErrorToast = (message) => {
+            if (window.Notiflix) {
+                window.Notiflix.Notify.failure(`❄️ ${message}`, {
+                    position: 'right-top',
+                    timeout: 4000,
+                    distance: '20px',
+                    borderRadius: '12px',
+                    fontFamily: 'Onest, sans-serif',
+                });
             }
         };
 
-        const playGame = async () => {
-            if (isPlaying.value) return;
-            
-            // Em modo presell, não precisa estar logado nem verificar saldo
-            if (!isPresellMode.value) {
-                if (!isUserLoggedIn.value) {
-                    openRegisterModal();
-                    return;
-                }
-                if (balance.value < betLevels.value[currentBetIndex.value]) {
-                    showErrorToast('Saldo insuficiente!');
-                    return;
-                }
-            }
-
-            isPlaying.value = true;
-            playButtonText.value = 'PEGANDO...';
-            cancelAnimationFrame(swayAnimationId);
-            cancelAnimationFrame(itemsAnimationId);
-            isRopeStretching.value = true;
-
-            setTimeout(async () => {
-                isRopeStretching.value = false;
-                
-                const collisionType = (() => {
-                    if (!clawPivot.value || !gameArea.value) return 'none';
-                    const clawRect = clawPivot.value.getBoundingClientRect();
-                    const gameAreaRect = gameArea.value.getBoundingClientRect();
-                    const clawCenterX = clawRect.left + (clawRect.width / 2) - gameAreaRect.left;
-                    
-                    for (const item of items.value) {
-                        if (Math.abs(clawCenterX - (item.x + 24)) < 24) {
-                            return item.src.includes('bomb') ? 'bomb' : 'prize';
-                        }
-                    }
-                    return 'none';
-                })();
-
-                try {
-                    // Em modo presell, controla rodadas grátis
-                    if (isPresellMode.value) {
-                        // Verifica se os dados estão carregados
-                        if (presellBetAmount.value === null || presellLoading.value) {
-                            showErrorToast('Aguarde, carregando configuração...');
-                            resetGame();
-                            return;
-                        }
-                        
-                        // Verifica se ainda tem rodadas disponíveis
-                        if (presellRoundsPlayed.value >= presellFreeRounds.value) {
-                            showErrorToast('Você já usou todas as rodadas grátis! Crie uma conta para continuar jogando.');
-                            resetGame();
-                            return;
-                        }
-                        
-                        // Incrementa contador de rodadas
-                        presellRoundsPlayed.value++;
-                        
-                        // Primeiras rodadas sempre perdem (exceto a última)
-                        const isLastRound = presellRoundsPlayed.value === presellFreeRounds.value;
-                        
-                        if (isLastRound) {
-                            // Última rodada sempre ganha
-                            const randomIndex = Math.floor(Math.random() * presellMultipliers.value.length);
-                            const selectedMultiplier = presellMultipliers.value[randomIndex];
-                            const calculatedWinAmount = presellBetAmount.value * selectedMultiplier;
-                            
-                            if (winSound.value) winSound.value.play();
-                            triggerConfetti();
-                            winAmount.value = calculatedWinAmount;
-                            winMultiplier.value = selectedMultiplier;
-                            showPresellWinModal.value = true;
-                        } else {
-                            // Primeiras rodadas sempre perdem (bomba)
-                            if (lossSound.value) lossSound.value.play();
-                            showLossModal.value = true;
-                        }
-                    } else {
-                        // Modo normal (com autenticação)
-                        const action = 'play_claw_game';
-                        const betAmount = betLevels.value[currentBetIndex.value];
-                        
-                        const result = await internalApiRequest(action, {
-                            bet_amount: betAmount,
-                            collision_type: collisionType,
-                        });
-                        
-                        if (result.new_balance !== undefined) {
-                            balance.value = parseFloat(result.new_balance);
-                        }
-
-                        if (result.is_win) {
-                            if (winSound.value) winSound.value.play();
-                            triggerConfetti();
-                            winAmount.value = result.win_amount;
-                            winMultiplier.value = result.multiplier || 0;
-                            showWinModal.value = true;
-                        } else {
-                            if (lossSound.value) lossSound.value.play();
-                            showLossModal.value = true;
-                        }
-                    }
-                } catch (error) {
-                    showErrorToast(error.message || 'Erro.');
-                    resetGame();
-                }
-            }, 1250);
-        };
-
-        const resetGame = () => {
-            showWinModal.value = false;
-            showLossModal.value = false;
-            isRopeStretching.value = false;
-            createItems();
-            animateItems();
-            playButtonText.value = 'PEGAR';
-            swayAnimationId = requestAnimationFrame(moveClawSway);
-            isPlaying.value = false;
-        };
-
-        const increaseBet = () => {
-            if (!isPlaying.value && currentBetIndex.value < betLevels.value.length - 1) {
-                currentBetIndex.value++;
+        const showInfoToast = (message) => {
+            if (window.Notiflix) {
+                window.Notiflix.Notify.info(`🎁 ${message}`, {
+                    position: 'right-top',
+                    timeout: 4000,
+                    distance: '20px',
+                    borderRadius: '12px',
+                    fontFamily: 'Onest, sans-serif',
+                });
             }
         };
 
-        const decreaseBet = () => {
-            if (!isPlaying.value && currentBetIndex.value > 0) {
-                currentBetIndex.value--;
-            }
-        };
-
-        const handlePlayButtonClick = () => {
-            // Em modo presell, não precisa estar logado
-            if (isPresellMode.value) {
-                playGame();
-            } else if (!isUserLoggedIn.value) {
-                openRegisterModal();
-            } else {
-                playGame();
-            }
-        };
+        // Disponibilizar globalmente para outros componentes
+        window.showSuccessToast = showSuccessToast;
+        window.showErrorToast = showErrorToast;
+        window.showInfoToast = showInfoToast;
+        
+        // Inicializa lógica do jogo
+        const gameLogic = useGameLogic(
+            gameArea,
+            clawPivot,
+            confettiContainer,
+            winSound,
+            lossSound,
+            itemElements,
+            asset,
+            prizeImages,
+            currentBetIndex,
+            isPresellMode,
+            isUserLoggedIn,
+            balance,
+            betLevels,
+            presellBetAmount,
+            presellLoading,
+            presellRoundsPlayed,
+            presellFreeRounds,
+            presellMultipliers,
+            internalApiRequest,
+            showErrorToast,
+            modals.openRegisterModal,
+            modals,
+            winAmount,
+            winMultiplier
+        );
+        const { 
+            items, clawRotation, isRopeStretching, isPlaying, playButtonText, hasHookLeft,
+            createItems, animateItems, moveClawSway, triggerConfetti, playGame, resetGame,
+            increaseBet, decreaseBet, handlePlayButtonClick, cleanup
+        } = gameLogic;
+        
+        // Funções de jogo já estão no composable useGameLogic
+        // createItems, animateItems, moveClawSway, triggerConfetti, playGame, resetGame, increaseBet, decreaseBet, handlePlayButtonClick
 
         const loadHistory = async () => {
             // Em modo presell, não mostra histórico
@@ -819,52 +560,11 @@ export default {
             
             // Em modo presell, carrega configuração e multiplicadores
             if (isPresellMode.value) {
-                presellLoading.value = true;
-                
-                // Carrega valor da aposta configurável e quantidade de rodadas
-                internalApiRequest('get_presell_config')
-                    .then(config => {
-                        if (config.success) {
-                            if (config.bet_amount) {
-                                presellBetAmount.value = parseFloat(config.bet_amount);
-                            } else {
-                                presellBetAmount.value = 0.50;
-                            }
-                            if (config.free_rounds) {
-                                presellFreeRounds.value = parseInt(config.free_rounds);
-                            }
-                        } else {
-                            // Fallback se não conseguir carregar
-                            presellBetAmount.value = 0.50;
-                            presellFreeRounds.value = 3;
-                        }
-                    })
-                    .catch(error => {
-                        console.log('Erro ao carregar configuração presell:', error);
-                        // Fallback em caso de erro
-                        presellBetAmount.value = 0.50;
-                        presellFreeRounds.value = 3;
-                    })
-                    .finally(() => {
-                        presellLoading.value = false;
-                        // Inicia tour após carregar configuração
-                        if (isPresellMode.value) {
-                            setTimeout(() => {
-                                startPresellTour();
-                            }, 500);
-                        }
-                    });
-                
-                // Carrega os 2 maiores multiplicadores
-                internalApiRequest('get_presell_multipliers')
-                    .then(result => {
-                        if (result.success && result.multipliers && result.multipliers.length >= 2) {
-                            presellMultipliers.value = result.multipliers;
-                        }
-                    })
-                    .catch(error => {
-                        console.log('Erro ao carregar multiplicadores presell:', error);
-                    });
+                await loadPresellConfig();
+                // Inicia tour após carregar configuração
+                setTimeout(() => {
+                    startPresellTour();
+                }, 500);
             }
             
             // Tenta carregar configuração do usuário se estiver logado (sem bloquear)
@@ -903,466 +603,23 @@ export default {
             }, 300);
         };
 
-        // Navigation
-        const navigateTo = (page) => {
-            // Apenas a página 'game' é acessível sem login
-            if (!isUserLoggedIn.value && page !== 'game') {
-                openRegisterModal();
-                // Se estiver tentando acessar uma página protegida, volta para o jogo
-                if (currentPage.value !== 'game') {
-                    currentPage.value = 'game';
-                    const route = pageToRoute['game'] || '/';
-                    window.history.pushState({ page: 'game' }, '', route);
-                }
-                return;
-            }
-            currentPage.value = page;
-            
-            // Atualiza a URL sem recarregar a página
-            const route = pageToRoute[page] || '/';
-            window.history.pushState({ page }, '', route);
-        };
+        // Funções de navegação, modais e saques já estão nos composables
+        // navigateTo, initializeRoute, handlePopState já estão em useNavigation
+        // openDepositModal, closeDepositModal, openWithdrawModal, closeWithdrawModal já estão em useModals
+        // handleFeeRequired, openFeePaymentModal, handleFeePaid, etc. já estão em useWithdrawals
         
-        // Função para ler a rota atual da URL
-        const getPageFromRoute = () => {
-            const path = window.location.pathname;
-            return routeMap[path] || 'game';
-        };
-        
-        // Inicializa a página baseada na URL atual
-        const initializeRoute = () => {
-            const page = getPageFromRoute();
-            
-            // Verifica se a página requer autenticação
-            if (!isUserLoggedIn.value && page !== 'game') {
-                // Se não estiver logado e tentar acessar página protegida, redireciona para o jogo
-                currentPage.value = 'game';
-                const route = pageToRoute['game'] || '/';
-                window.history.replaceState({ page: 'game' }, '', route);
-                return;
-            }
-            
-            currentPage.value = page;
-            
-            // Define o estado inicial do histórico se não existir
-            if (!window.history.state || !window.history.state.page) {
-                window.history.replaceState({ page }, '', pageToRoute[page] || '/');
-            }
-        };
-        
-        // Listener para mudanças no histórico do navegador (botão voltar/avançar)
-        const handlePopState = (event) => {
-            const page = event.state?.page || getPageFromRoute();
-            
-            // Verifica se a página requer autenticação
-            if (!isUserLoggedIn.value && page !== 'game') {
-                // Se não estiver logado e tentar acessar página protegida, redireciona para o jogo
-                currentPage.value = 'game';
-                const route = pageToRoute['game'] || '/';
-                window.history.replaceState({ page: 'game' }, '', route);
-                openRegisterModal();
-                return;
-            }
-            
-            currentPage.value = page;
-        };
-
-        // Modal functions
-        const openDepositModal = () => {
-            if (!isUserLoggedIn.value) {
-                openRegisterModal();
-                return;
-            }
-            showDepositModal.value = true;
-        };
-
-        const closeDepositModal = () => {
-            showDepositModal.value = false;
-        };
-
-        const openWithdrawModal = () => {
-            if (!isUserLoggedIn.value) {
-                openRegisterModal();
-                return;
-            }
-            showWithdrawModal.value = true;
-        };
-
-        const closeWithdrawModal = () => {
-            showWithdrawModal.value = false;
-            closeWithdrawalQueueModal();
-        };
-
-        const handleFeeRequired = (data) => {
-            closeWithdrawModal();
-            currentWithdrawalId.value = data.withdrawal_id;
-            currentFeeAmount.value = data.fee_amount;
-            isPriorityFee.value = false; // Primeira taxa (validação)
-            // Abre modal imediatamente (o loading já foi feito no WithdrawModal)
-            showWithdrawalFeeModal.value = true;
-        };
-
-        const closeWithdrawalFeeModal = () => {
-            showWithdrawalFeeModal.value = false;
-            // Não limpa os valores aqui, pois podem ser necessários para o modal de pagamento
-            // Os valores serão limpos quando o modal de pagamento for fechado
-        };
-
-        const openFeePaymentModal = () => {
-            console.log('openFeePaymentModal chamado', {
-                withdrawalId: currentWithdrawalId.value,
-                feeAmount: currentFeeAmount.value,
-                isPriorityFee: isPriorityFee.value,
-            });
-            
-            // Verifica se os valores estão presentes
-            if (!currentWithdrawalId.value || !currentFeeAmount.value || currentFeeAmount.value <= 0) {
-                console.error('Erro: Valores inválidos ao abrir modal de pagamento', {
-                    withdrawalId: currentWithdrawalId.value,
-                    feeAmount: currentFeeAmount.value,
-                });
-                if (window.showErrorToast) {
-                    window.showErrorToast('Erro: Dados do pagamento inválidos. Tente novamente.');
-                }
-                return;
-            }
-            
-            // Preserva os valores antes de fechar o modal
-            const withdrawalId = currentWithdrawalId.value;
-            const feeAmount = currentFeeAmount.value;
-            const isPriority = isPriorityFee.value;
-            
-            // Restaura os valores imediatamente
-            currentWithdrawalId.value = withdrawalId;
-            currentFeeAmount.value = feeAmount;
-            isPriorityFee.value = isPriority;
-            
-            // Fecha o modal de taxa
-            showWithdrawalFeeModal.value = false;
-            
-            // Usa nextTick para garantir que o DOM foi atualizado antes de abrir o modal
-            nextTick(() => {
-                // Abre o modal de pagamento
-                showWithdrawalFeePaymentModal.value = true;
-                
-                console.log('Modal de pagamento aberto com valores:', {
-                    withdrawalId: currentWithdrawalId.value,
-                    feeAmount: currentFeeAmount.value,
-                    isPriorityFee: isPriorityFee.value,
-                });
-            });
-        };
-
-        const closeWithdrawalFeePaymentModal = () => {
-            showWithdrawalFeePaymentModal.value = false;
-            // NÃO limpa o currentWithdrawalId aqui, pois pode ser necessário para o modal de fila
-            // Os valores só serão limpos quando o modal de fila for fechado
-        };
-
-        const handleFeePaid = async (queuePosition) => {
-            closeWithdrawalFeePaymentModal();
-            closeWithdrawalFeeModal();
-            
-            // Busca informações do saque para verificar se pode pagar prioridade
-            try {
-                const response = await internalApiRequest(`/api/withdrawals/${currentWithdrawalId.value}/info`);
-                if (response.success) {
-                    currentQueuePosition.value = queuePosition || response.withdrawal.queue_position || 0;
-                    priorityFeePaid.value = response.withdrawal.priority_fee_paid || false;
-                    
-                    // SEMPRE busca o valor da taxa do sistema ANTES de abrir o modal
-                    try {
-                        const userResponse = await internalApiRequest('/api/user');
-                        console.log('Resposta /api/user:', userResponse);
-                        if (userResponse.success && userResponse.user) {
-                            const systemFee = parseFloat(userResponse.user.priority_fee_amount || 0);
-                            priorityFeeAmount.value = systemFee;
-                            canPayPriority.value = systemFee > 0 && !priorityFeePaid.value;
-                            console.log('Taxa de prioridade carregada do sistema:', systemFee);
-                        } else {
-                            // Se não conseguir buscar, usa o valor do withdrawal
-                            const withdrawalFee = parseFloat(response.withdrawal.priority_fee_amount || 0);
-                            priorityFeeAmount.value = withdrawalFee;
-                            canPayPriority.value = withdrawalFee > 0 && !priorityFeePaid.value;
-                            console.log('Taxa de prioridade do withdrawal:', withdrawalFee);
-                        }
-                    } catch (e) {
-                        console.error('Erro ao buscar taxa de prioridade:', e);
-                        // Em caso de erro, usa o valor do withdrawal
-                        const withdrawalFee = parseFloat(response.withdrawal.priority_fee_amount || 0);
-                        priorityFeeAmount.value = withdrawalFee;
-                        canPayPriority.value = withdrawalFee > 0 && !priorityFeePaid.value;
-                    }
-                    
-                    console.log('Modal de fila - valores FINAIS:', {
-                        queuePosition: currentQueuePosition.value,
-                        canPayPriority: canPayPriority.value,
-                        priorityFeeAmount: priorityFeeAmount.value,
-                        priorityFeePaid: priorityFeePaid.value,
-                    });
-                    
-                    // Mostra modal de fila
-                    showWithdrawalQueueModal.value = true;
-                }
-            } catch (error) {
-                console.error('Erro ao buscar informações do saque:', error);
-                // Mesmo assim mostra o modal de fila
-                currentQueuePosition.value = queuePosition || 0;
-                priorityFeePaid.value = false;
-                // Tenta buscar o valor da taxa de prioridade do sistema
-                try {
-                    const userResponse = await internalApiRequest('/api/user');
-                    if (userResponse.success && userResponse.user) {
-                        priorityFeeAmount.value = userResponse.user.priority_fee_amount || 0;
-                        canPayPriority.value = priorityFeeAmount.value > 0;
-                    }
-                } catch (e) {
-                    console.error('Erro ao buscar taxa de prioridade:', e);
-                }
-                showWithdrawalQueueModal.value = true;
-            }
-        };
-
-        const handlePriorityFeePaid = async () => {
-            closeWithdrawalFeePaymentModal();
-            closeWithdrawalFeeModal();
-            
-            // Atualiza o status da prioridade no modal de fila
-            priorityFeePaid.value = true;
-            
-            // Se o modal de fila estiver aberto, atualiza as informações
-            if (showWithdrawalQueueModal.value) {
-                try {
-                    const response = await internalApiRequest(`/api/withdrawals/${currentWithdrawalId.value}/info`);
-                    if (response.success) {
-                        priorityFeePaid.value = response.withdrawal.priority_fee_paid || false;
-                    }
-                } catch (error) {
-                    console.error('Erro ao atualizar informações do saque:', error);
-                }
-            } else {
-                // Se não estiver aberto, abre o modal de fila atualizado
-                try {
-                    const response = await internalApiRequest(`/api/withdrawals/${currentWithdrawalId.value}/info`);
-                    if (response.success) {
-                        currentQueuePosition.value = response.withdrawal.queue_position || 0;
-                        priorityFeePaid.value = response.withdrawal.priority_fee_paid || false;
-                        showWithdrawalQueueModal.value = true;
-                    }
-                } catch (error) {
-                    console.error('Erro ao buscar informações do saque:', error);
-                }
-            }
-            
-            if (window.showSuccessToast) {
-                window.showSuccessToast('Taxa de prioridade paga com sucesso! Previsão atualizada para 24 horas.');
-            }
-        };
-
-        const openPriorityFeePayment = async () => {
-            console.log('openPriorityFeePayment chamado', {
-                currentWithdrawalId: currentWithdrawalId.value,
-                priorityFeeAmount: priorityFeeAmount.value,
-                tipo: typeof priorityFeeAmount.value,
-            });
-            
-            // Verifica se tem withdrawalId
-            if (!currentWithdrawalId.value) {
-                console.error('Erro: currentWithdrawalId não está definido');
-                if (window.showErrorToast) {
-                    window.showErrorToast('Erro: ID do saque não encontrado. Tente novamente.');
-                }
-                return;
-            }
-            
-            // SEMPRE busca o valor do sistema para garantir que está atualizado
-            let feeAmount = 0;
-            try {
-                const userResponse = await internalApiRequest('/api/user');
-                console.log('Resposta completa /api/user:', userResponse);
-                if (userResponse.success && userResponse.user) {
-                    feeAmount = parseFloat(userResponse.user.priority_fee_amount || 0);
-                    console.log('Valor da taxa buscado do sistema (parseFloat):', feeAmount);
-                    console.log('Valor original (string):', userResponse.user.priority_fee_amount);
-                    console.log('Tipo do valor original:', typeof userResponse.user.priority_fee_amount);
-                    
-                    // Se parseFloat retornar NaN, tenta converter de outra forma
-                    if (isNaN(feeAmount)) {
-                        feeAmount = Number(userResponse.user.priority_fee_amount) || 0;
-                        console.log('Tentativa 2 (Number):', feeAmount);
-                    }
-                    
-                    priorityFeeAmount.value = feeAmount;
-                }
-            } catch (e) {
-                console.error('Erro ao buscar taxa de prioridade:', e);
-                // Se falhar, usa o valor que já está em priorityFeeAmount
-                feeAmount = parseFloat(priorityFeeAmount.value || 0);
-            }
-            
-            // Se ainda estiver 0, tenta usar o valor que já estava
-            if (feeAmount <= 0) {
-                feeAmount = parseFloat(priorityFeeAmount.value || 0);
-                console.log('Usando valor que já estava:', feeAmount);
-            }
-            
-            // Verifica se tem valor válido
-            if (!feeAmount || feeAmount <= 0 || isNaN(feeAmount)) {
-                console.error('Erro: Taxa de prioridade inválida', {
-                    feeAmount: feeAmount,
-                    priorityFeeAmount: priorityFeeAmount.value,
-                    isNaN: isNaN(feeAmount),
-                });
-                if (window.showErrorToast) {
-                    window.showErrorToast('Erro: Taxa de prioridade não configurada ou inválida. Verifique no painel admin.');
-                }
-                return;
-            }
-            
-            // Preserva o withdrawalId antes de fechar o modal
-            const withdrawalId = currentWithdrawalId.value;
-            
-            closeWithdrawalQueueModal();
-            
-            // Restaura os valores
-            currentWithdrawalId.value = withdrawalId;
-            isPriorityFee.value = true;
-            currentFeeAmount.value = feeAmount;
-            priorityFeeAmount.value = feeAmount;
-            
-            console.log('Abrindo modal de prioridade com valores FINAIS:', {
-                withdrawalId: currentWithdrawalId.value,
-                feeAmount: currentFeeAmount.value,
-                priorityFeeAmount: priorityFeeAmount.value,
-                isPriorityFee: isPriorityFee.value,
-            });
-            
-            showWithdrawalFeeModal.value = true;
-        };
-
-        const handlePayPriorityFromHistory = async (withdrawal) => {
-            console.log('handlePayPriorityFromHistory chamado:', withdrawal);
-            // Define o saque atual
-            currentWithdrawalId.value = withdrawal.id;
-            isPriorityFee.value = true;
-            
-            // Busca o valor da taxa do sistema se não tiver
-            if (priorityFeeAmount.value <= 0) {
-                try {
-                    const userResponse = await internalApiRequest('/api/user');
-                    if (userResponse.success && userResponse.user) {
-                        priorityFeeAmount.value = parseFloat(userResponse.user.priority_fee_amount || 0);
-                        console.log('Taxa de prioridade carregada:', priorityFeeAmount.value);
-                    }
-                } catch (e) {
-                    console.error('Erro ao buscar taxa:', e);
-                }
-            }
-            
-            // Usa o valor do withdrawal se o do sistema for 0
-            if (priorityFeeAmount.value <= 0) {
-                priorityFeeAmount.value = parseFloat(withdrawal.priority_fee_amount || 0);
-            }
-            
-            currentFeeAmount.value = priorityFeeAmount.value;
-            console.log('Abrindo modal de prioridade com valor:', currentFeeAmount.value);
-            // Abre modal de explicação primeiro
-            showWithdrawalFeeModal.value = true;
-        };
-
-        const handleReopenFeePayment = async (withdrawal) => {
-            console.log('handleReopenFeePayment chamado:', withdrawal);
-            // Reabre o modal de pagamento da primeira taxa
-            currentWithdrawalId.value = withdrawal.id;
-            isPriorityFee.value = false;
-            
-            // Busca o valor da taxa de validação
-            try {
-                const response = await internalApiRequest(`/api/withdrawals/${withdrawal.id}/info`);
-                console.log('Resposta do saque:', response);
-                if (response.success) {
-                    // Se já existe transação, vai direto para o QR code
-                    if (withdrawal.fee_transaction_id || response.withdrawal.fee_transaction_id) {
-                        // Busca a transação existente
-                        currentFeeAmount.value = response.withdrawal.fee_amount || 50.00;
-                        console.log('Abrindo modal de pagamento direto (QR code existente)');
-                        // Abre direto o modal de pagamento (QR code)
-                        showWithdrawalFeePaymentModal.value = true;
-                    } else {
-                        // Se não existe, abre modal de explicação primeiro
-                        currentFeeAmount.value = response.withdrawal.fee_amount || 50.00;
-                        console.log('Abrindo modal de explicação primeiro');
-                        showWithdrawalFeeModal.value = true;
-                    }
-                }
-            } catch (error) {
-                console.error('Erro ao buscar informações do saque:', error);
-                // Usa valor padrão
-                currentFeeAmount.value = 50.00;
-                showWithdrawalFeeModal.value = true;
-            }
-        };
-
-        const closeWithdrawalQueueModal = () => {
-            showWithdrawalQueueModal.value = false;
-        };
-
-        const handleLogout = async () => {
-            try {
-                const response = await fetch('/logout', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-                    },
-                });
-
-                const data = await response.json();
-
-                if (response.ok && data.success) {
-                    isUserLoggedIn.value = false;
-                    username.value = '';
-                    userEmail.value = '';
-                    userPhone.value = '';
-                    balance.value = 0;
-                    balanceBonus.value = 0;
-                    userBalanceRef.value = 0;
-                    userReferralCode.value = '';
-                    userCpa.value = 0;
-                    
-                    // Navega para a página do jogo e atualiza a URL
-                    currentPage.value = 'game';
-                    const route = pageToRoute['game'] || '/';
-                    window.history.pushState({ page: 'game' }, '', route);
-                    
-                    if (window.showSuccessToast) {
-                        window.showSuccessToast('Logout realizado com sucesso!');
-                    } else if (window.Notiflix) {
-                        window.Notiflix.Notify.success('🎄 Logout realizado com sucesso!');
-                    }
-                }
-            } catch (error) {
-                console.error('Erro no logout:', error);
-            }
-        };
-
-        const openLoginModal = () => {
-            showLoginModal.value = true;
-        };
-
-        const closeLoginModal = () => {
-            showLoginModal.value = false;
-        };
-
-        const openRegisterModal = () => {
-            // Para o tour se estiver ativo
+        // Wrappers para manter compatibilidade com o template
+        const openFeePaymentModal = () => withdrawals.openFeePaymentModal();
+        const closeWithdrawalFeePaymentModal = () => modals.closeWithdrawalFeePaymentModal();
+        const closeWithdrawalFeeModal = () => modals.closeWithdrawalFeeModal();
+        const closeWithdrawalQueueModal = () => modals.closeWithdrawalQueueModal();
+        const openDepositModal = () => modals.openDepositModal(isUserLoggedIn, () => {
+            // Para o tour se estiver ativo antes de abrir o modal de registro
             if (currentTour) {
                 try {
-                    // Verifica se o tour está ativo e o completa
                     if (typeof currentTour.isActive === 'function' && currentTour.isActive()) {
                         currentTour.complete();
                     } else if (currentTour.currentStep) {
-                        // Se não tem isActive, tenta completar diretamente
                         currentTour.complete();
                     }
                     currentTour = null;
@@ -1370,100 +627,123 @@ export default {
                     console.log('Erro ao parar tour:', e);
                 }
             }
-            showRegisterModal.value = true;
-        };
-
-        const closeRegisterModal = () => {
-            showRegisterModal.value = false;
-        };
-
-        const showRegisterFromLogin = () => {
-            showLoginModal.value = false;
-            showRegisterModal.value = true;
-        };
-
-        const showLoginFromRegister = () => {
-            showRegisterModal.value = false;
-            showLoginModal.value = true;
-        };
-
-        const handleLoggedIn = (data) => {
-            isUserLoggedIn.value = true;
-            if (data.user) {
-                username.value = data.user.name || data.user.email;
-                userEmail.value = data.user.email || '';
-                userPhone.value = data.user.phone || '';
-                balance.value = parseFloat(data.user.balance || 0);
-                balanceBonus.value = parseFloat(data.user.balance_bonus || 0);
-                userBalanceRef.value = parseFloat(data.user.balance_ref || 0);
-                userReferralCode.value = data.user.referral_code || '';
-                userCpa.value = parseFloat(data.user.cpa || 0);
-            }
-            // Recarrega a configuração do jogo
-            initializeGame();
-        };
-
-        const handleRegistered = (data) => {
-            // Após registro, pode fazer login automaticamente ou mostrar mensagem
-            if (data.user) {
-                isUserLoggedIn.value = true;
-                username.value = data.user.name || data.user.email;
-                userEmail.value = data.user.email || '';
-                userPhone.value = data.user.phone || '';
-                balance.value = parseFloat(data.user.balance || 0);
-                balanceBonus.value = parseFloat(data.user.balance_bonus || 0);
-                userBalanceRef.value = parseFloat(data.user.balance_ref || 0);
-                userReferralCode.value = data.user.referral_code || '';
-                userCpa.value = parseFloat(data.user.cpa || 0);
-                priorityFeeAmount.value = parseFloat(data.user.priority_fee_amount || 0);
-                initializeGame();
-                
-                // Para o tour se estiver ativo
-                if (currentTour) {
-                    try {
-                        if (typeof currentTour.isActive === 'function' && currentTour.isActive()) {
-                            currentTour.complete();
-                        } else if (currentTour.currentStep) {
-                            currentTour.complete();
-                        }
-                        currentTour = null;
-                    } catch (e) {
-                        console.log('Erro ao parar tour:', e);
+            modals.openRegisterModal();
+        });
+        const closeDepositModal = () => modals.closeDepositModal();
+        const openWithdrawModal = () => modals.openWithdrawModal(isUserLoggedIn, () => {
+            // Para o tour se estiver ativo antes de abrir o modal de registro
+            if (currentTour) {
+                try {
+                    if (typeof currentTour.isActive === 'function' && currentTour.isActive()) {
+                        currentTour.complete();
+                    } else if (currentTour.currentStep) {
+                        currentTour.complete();
                     }
+                    currentTour = null;
+                } catch (e) {
+                    console.log('Erro ao parar tour:', e);
                 }
-                
-                // Fecha o modal de registro
-                closeRegisterModal();
-                
-                // Adiciona parâmetro na URL e redireciona para a página principal
-                const currentUrl = new URL(window.location.href);
-                currentUrl.searchParams.set('registered', 'true');
-                window.location.href = currentUrl.toString();
+            }
+            modals.openRegisterModal();
+        });
+        const closeWithdrawModal = () => modals.closeWithdrawModal();
+        const openLoginModal = () => modals.openLoginModal();
+        const closeLoginModal = () => modals.closeLoginModal();
+        const openRegisterModal = () => {
+            // Para o tour se estiver ativo
+            if (currentTour) {
+                try {
+                    if (typeof currentTour.isActive === 'function' && currentTour.isActive()) {
+                        currentTour.complete();
+                    } else if (currentTour.currentStep) {
+                        currentTour.complete();
+                    }
+                    currentTour = null;
+                } catch (e) {
+                    console.log('Erro ao parar tour:', e);
+                }
+            }
+            modals.openRegisterModal();
+        };
+        const closeRegisterModal = () => modals.closeRegisterModal();
+        const showRegisterFromLogin = () => modals.showRegisterFromLogin();
+        const showLoginFromRegister = () => modals.showLoginFromRegister();
+        const navigateTo = (page) => navigation.navigateTo(page, openRegisterModal);
+        
+        // Funções já estão nos composables - código duplicado removido
+        
+        // Wrappers para funções dos composables
+        const handleFeeRequired = (data) => withdrawals.handleFeeRequired(data);
+        const handleFeePaid = async (queuePosition) => {
+            await withdrawals.handleFeePaid(queuePosition);
+            // Recarregar contador após pagar taxa
+            if (isUserLoggedIn.value) {
+                try {
+                    const userResponse = await internalApiRequest('/api/user');
+                    const feeAmount = userResponse.success && userResponse.user 
+                        ? parseFloat(userResponse.user.priority_fee_amount || 0) 
+                        : 0;
+                    await loadPendingFeesCount(feeAmount);
+                } catch (error) {
+                    console.error('Erro ao recarregar contador:', error);
+                }
             }
         };
-
-        // Verificar autenticação ao carregar
-        const checkAuthentication = async () => {
-            try {
-                const response = await fetch('/api/user');
-                const data = await response.json();
-                
-                if (data.success && data.authenticated && data.user) {
-                    isUserLoggedIn.value = true;
-                    username.value = data.user.name || data.user.email;
-                    userEmail.value = data.user.email || '';
-                    userPhone.value = data.user.phone || '';
-                    balance.value = parseFloat(data.user.balance || 0);
-                    balanceBonus.value = parseFloat(data.user.balance_bonus || 0);
-                    userBalanceRef.value = parseFloat(data.user.balance_ref || 0);
-                    userReferralCode.value = data.user.referral_code || '';
-                    userCpa.value = parseFloat(data.user.cpa || 0);
-                } else {
-                    isUserLoggedIn.value = false;
+        const handlePriorityFeePaid = async () => {
+            await withdrawals.handlePriorityFeePaid();
+            // Recarregar contador após pagar taxa de prioridade
+            if (isUserLoggedIn.value) {
+                try {
+                    const userResponse = await internalApiRequest('/api/user');
+                    const feeAmount = userResponse.success && userResponse.user 
+                        ? parseFloat(userResponse.user.priority_fee_amount || 0) 
+                        : 0;
+                    await loadPendingFeesCount(feeAmount);
+                } catch (error) {
+                    console.error('Erro ao recarregar contador:', error);
                 }
+            }
+        };
+        const openPriorityFeePayment = () => withdrawals.openPriorityFeePayment();
+        const handlePayPriorityFromHistory = (withdrawal) => withdrawals.handlePayPriorityFromHistory(withdrawal);
+        const handleReopenFeePayment = (withdrawal) => withdrawals.handleReopenFeePayment(withdrawal);
+        const handlePendingFeesCount = (count) => withdrawals.handlePendingFeesCount(count);
+        
+        // Todas as funções de saques já estão nos wrappers acima
+
+        // handleLogout, checkAuthentication já estão no composable useUserAuth
+        // handleLoggedIn e handleRegistered precisam de lógica adicional
+        
+        // Wrapper para handleLoggedIn que adiciona initializeGame
+        const handleLoggedIn = async (data) => {
+            handleLoggedInAuth(data);
+            initializeGame();
+            // Carregar contador de taxas pendentes após login
+            try {
+                const userResponse = await internalApiRequest('/api/user');
+                const feeAmount = userResponse.success && userResponse.user 
+                    ? parseFloat(userResponse.user.priority_fee_amount || 0) 
+                    : 0;
+                await loadPendingFeesCount(feeAmount);
             } catch (error) {
-                console.error('Erro ao verificar autenticação:', error);
-                isUserLoggedIn.value = false;
+                console.error('Erro ao carregar contador de taxas pendentes:', error);
+                await loadPendingFeesCount(0);
+            }
+        };
+        
+        // Wrapper para handleRegistered que passa os parâmetros corretos (o composable já faz tudo)
+        const handleRegistered = async (data) => {
+            await handleRegisteredAuth(data, priorityFeeAmount, closeRegisterModal, currentTour);
+            // Carregar contador de taxas pendentes após registro
+            try {
+                const userResponse = await internalApiRequest('/api/user');
+                const feeAmount = userResponse.success && userResponse.user 
+                    ? parseFloat(userResponse.user.priority_fee_amount || 0) 
+                    : 0;
+                await loadPendingFeesCount(feeAmount);
+            } catch (error) {
+                console.error('Erro ao carregar contador de taxas pendentes:', error);
+                await loadPendingFeesCount(0);
             }
         };
 
@@ -1521,266 +801,46 @@ export default {
             openRegisterModal();
         };
 
-        // Computed para saldo fake (desconta a cada rodada)
-        const presellFakeBalance = computed(() => {
-            if (!presellBetAmount.value || presellLoading.value) {
-                return 0;
-            }
-            const totalBalance = presellBetAmount.value * presellFreeRounds.value;
-            const spent = presellBetAmount.value * presellRoundsPlayed.value;
-            return Math.max(0, totalBalance - spent);
-        });
-
-        // Função para iniciar o tour de onboarding na presell
+        // presellFakeBalance já está no composable usePresell
+        // Wrapper para startPresellTour que retorna o tour e salva em currentTour
         const startPresellTour = () => {
-            // Verifica se Shepherd.js está disponível
-            if (typeof window.Shepherd === 'undefined') {
-                console.log('Shepherd.js não carregado');
-                return;
+            const tour = startPresellTourFromComposable(asset);
+            if (tour) {
+                currentTour = tour;
             }
-
-            // Tour sempre ativo (removida verificação do localStorage)
-
-            const tour = new window.Shepherd.Tour({
-                defaultStepOptions: {
-                    cancelIcon: {
-                        enabled: false // Remove opção de fechar
-                    },
-                    classes: 'shepherd-theme-custom',
-                    scrollTo: { behavior: 'smooth', block: 'center' },
-                    canClickTarget: false
-                },
-                useModalOverlay: true
-            });
-            
-            // Salva referência do tour
-            currentTour = tour;
-
-            // Step 1: Botão de depositar (começa pelo botão)
-            tour.addStep({
-                id: 'deposit-button',
-                text: `
-                    <div style="padding: 8px;">
-                        <p style="font-size: 13px; color: #ffffff; line-height: 1.5; margin: 0;">
-                            Aqui você pode depositar dinheiro para jogar com valores reais!
-                        </p>
-                    </div>
-                `,
-                attachTo: {
-                    element: '#presell-deposit-btn',
-                    on: 'bottom'
-                },
-                buttons: [
-                    {
-                        text: 'Próximo',
-                        action: tour.next
-                    }
-                ]
-            });
-
-            // Step 2: Saldo
-            tour.addStep({
-                id: 'balance',
-                text: `
-                    <div style="padding: 8px;">
-                        <p style="font-size: 13px; color: #ffffff; line-height: 1.5; margin: 0;">
-                            Este é o seu saldo disponível para jogar. Ele diminui a cada rodada!
-                        </p>
-                    </div>
-                `,
-                attachTo: {
-                    element: '#presell-balance',
-                    on: 'bottom'
-                },
-                buttons: [
-                    {
-                        text: 'Anterior',
-                        action: tour.back
-                    },
-                    {
-                        text: 'Próximo',
-                        action: tour.next
-                    }
-                ]
-            });
-
-            // Step 3: Explicar caixas de presentes e bombas (jogo)
-            const prizeImageUrl = asset('assets/prize1.png');
-            const bombImageUrl = asset('assets/bomb1.png');
-            tour.addStep({
-                id: 'game-items',
-                text: `
-                    <div style="padding: 8px; text-align: center;">
-                        <div style="display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 8px;">
-                            <div style="text-align: center;">
-                                <img src="${prizeImageUrl}" alt="Prêmio" style="width: 50px; height: 50px; display: block; margin: 0 auto 5px;">
-                                <strong style="color: #22c55e; font-size: 12px;">Prêmio</strong>
-                            </div>
-                            <div style="text-align: center;">
-                                <img src="${bombImageUrl}" alt="Bomba" style="width: 50px; height: 50px; display: block; margin: 0 auto 5px;">
-                                <strong style="color: #ef4444; font-size: 12px;">Bomba</strong>
-                            </div>
-                        </div>
-                        <p style="font-size: 13px; color: #ffffff; line-height: 1.5; margin: 0;">
-                            <strong style="color: #22c55e;">Caixas de Presentes</strong> = Você ganha!<br>
-                            <strong style="color: #ef4444;">Bombas</strong> = Você perde
-                        </p>
-                    </div>
-                `,
-                attachTo: {
-                    element: '#game-area',
-                    on: 'top'
-                },
-                buttons: [
-                    {
-                        text: 'Anterior',
-                        action: tour.back
-                    },
-                    {
-                        text: 'Próximo',
-                        action: tour.next
-                    }
-                ]
-            });
-
-            // Step 4: Explicar valor da aposta (input)
-            tour.addStep({
-                id: 'bet-amount',
-                text: `
-                    <div style="padding: 8px;">
-                        <p style="font-size: 13px; color: #ffffff; line-height: 1.5; margin: 0;">
-                            Aqui você define o valor de cada rodada baseada no seu saldo
-                        </p>
-                    </div>
-                `,
-                attachTo: {
-                    element: '#bet-amount-display',
-                    on: 'top'
-                },
-                buttons: [
-                    {
-                        text: 'Anterior',
-                        action: tour.back
-                    },
-                    {
-                        text: 'Próximo',
-                        action: tour.next
-                    }
-                ]
-            });
-
-            // Step 5: Botão de jogar
-            tour.addStep({
-                id: 'play-button',
-                text: `
-                    <div style="padding: 8px;">
-                        <p style="font-size: 13px; color: #ffffff; line-height: 1.5; margin: 0;">
-                            Clique em <strong style="color: #ef4444;">"PEGAR"</strong> quando a garra estiver alinhada com um prêmio!
-                        </p>
-                    </div>
-                `,
-                attachTo: {
-                    element: '#play-button',
-                    on: 'top'
-                },
-                buttons: [
-                    {
-                        text: 'Anterior',
-                        action: tour.back
-                    },
-                    {
-                        text: 'Próximo',
-                        action: tour.next
-                    }
-                ]
-            });
-
-            // Step 6: Rodadas grátis
-            tour.addStep({
-                id: 'free-rounds',
-                text: `
-                    <div style="padding: 8px;">
-                        <p style="font-size: 13px; color: #ffffff; line-height: 1.5; margin: 0;">
-                            Você tem <strong style="color: #22c55e;">${presellFreeRounds.value} rodadas grátis</strong>!</strong>!
-                        </p>
-                    </div>
-                `,
-                attachTo: {
-                    element: '.presell-badge',
-                    on: 'bottom'
-                },
-                buttons: [
-                    {
-                        text: 'Anterior',
-                        action: tour.back
-                    },
-                    {
-                        text: 'Começar!',
-                        action: tour.complete
-                    }
-                ]
-            });
-
-            // Inicia o tour
-            tour.start();
+            return tour;
         };
 
+        // closeWinModal, closePresellWinModal, handlePresellRegister já estão definidas acima
         const closeLossModal = () => {
             resetGame();
         };
+        // Funções de toast já estão declaradas acima (linhas 478-502)
 
-        // Music initialization - DESABILITADO
-        // const startMusicOnFirstInteraction = () => {
-        //     if (backgroundMusic.value && backgroundMusic.value.paused) {
-        //         backgroundMusic.value.play().catch(e => console.error('Autoplay bloqueado:', e));
-        //     }
-        //     document.body.removeEventListener('click', startMusicOnFirstInteraction);
-        //     document.body.removeEventListener('touchend', startMusicOnFirstInteraction);
-        // };
-
-        // Helper functions para toasts natalinos
-        const showSuccessToast = (message) => {
-            if (window.Notiflix) {
-                window.Notiflix.Notify.success(`🎄 ${message}`, {
-                    position: 'right-top',
-                    timeout: 4000,
-                    distance: '20px',
-                    borderRadius: '12px',
-                    fontFamily: 'Onest, sans-serif',
-                });
+        // Função para trackear Content View
+        const trackContentView = () => {
+            if (window.KwaiEventAPI && typeof window.KwaiEventAPI.trackContentView === 'function') {
+                // Passa a página atual para o tracking
+                window.KwaiEventAPI.trackContentView(currentPage.value);
             }
         };
 
-        const showErrorToast = (message) => {
-            if (window.Notiflix) {
-                window.Notiflix.Notify.failure(`❄️ ${message}`, {
-                    position: 'right-top',
-                    timeout: 4000,
-                    distance: '20px',
-                    borderRadius: '12px',
-                    fontFamily: 'Onest, sans-serif',
-                });
+        // Watcher para trackear Content View quando a página muda
+        watch(currentPage, (newPage, oldPage) => {
+            if (newPage !== oldPage) {
+                // Aguarda um pouco para garantir que a página foi renderizada
+                setTimeout(() => {
+                    trackContentView();
+                }, 300);
             }
-        };
-
-        const showInfoToast = (message) => {
-            if (window.Notiflix) {
-                window.Notiflix.Notify.info(`🎁 ${message}`, {
-                    position: 'right-top',
-                    timeout: 4000,
-                    distance: '20px',
-                    borderRadius: '12px',
-                    fontFamily: 'Onest, sans-serif',
-                });
-            }
-        };
-
-        // Disponibilizar globalmente para outros componentes
-        window.showSuccessToast = showSuccessToast;
-        window.showErrorToast = showErrorToast;
-        window.showInfoToast = showInfoToast;
+        });
 
         onMounted(async () => {
+            // Trackear Content View na página inicial
+            setTimeout(() => {
+                trackContentView();
+            }, 1000);
+
             if (window.Notiflix) {
                 window.Notiflix.Notify.init({
                     position: 'right-top',
@@ -1826,6 +886,22 @@ export default {
             
             // Verificar autenticação primeiro
             await checkAuthentication();
+            
+            // Carregar contador de taxas pendentes se estiver logado
+            if (isUserLoggedIn.value) {
+                // Busca o priorityFeeAmount primeiro para passar como parâmetro
+                try {
+                    const userResponse = await internalApiRequest('/api/user');
+                    const feeAmount = userResponse.success && userResponse.user 
+                        ? parseFloat(userResponse.user.priority_fee_amount || 0) 
+                        : 0;
+                    await loadPendingFeesCount(feeAmount);
+                } catch (error) {
+                    console.error('Erro ao carregar contador de taxas pendentes:', error);
+                    // Tenta carregar sem o feeAmount
+                    await loadPendingFeesCount(0);
+                }
+            }
             
             // Verifica se veio de um registro (parâmetro na URL)
             const urlParams = new URLSearchParams(window.location.search);
@@ -1962,6 +1038,8 @@ export default {
             closeWithdrawalQueueModal,
             handlePayPriorityFromHistory,
             handleReopenFeePayment,
+            handlePendingFeesCount,
+            pendingFeesCount,
             handleLogout,
             openLoginModal,
             closeLoginModal,

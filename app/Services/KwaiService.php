@@ -94,16 +94,17 @@ class KwaiService
             $url = 'https://www.adsnebula.com/log/common/api';
 
             // Monta payload conforme código do cliente
+            // Conforme documentação JavaScript: testFlag sempre false, trackFlag boolean (true = Test Events)
             $payload = [
                 'access_token' => (string) $this->accessToken,
                 'clickid' => (string) $clickId,
                 'event_name' => (string) $eventName,
                 'pixelId' => (string) $this->pixelId,
-                'is_attributed' => 1, // Número, não string
+                'is_attributed' => 1, // Número
                 'mmpcode' => (string) $this->mmpcode,
                 'pixelSdkVersion' => (string) $this->pixelSdkVersion,
-                'testFlag' => false, // Boolean, não string
-                'trackFlag' => $this->isTest ? 1 : 0, // Número: 1 = eventos aparecem em "Test Events"
+                'testFlag' => false, // Sempre false (boolean)
+                'trackFlag' => $this->isTest, // Boolean: true = eventos aparecem em "Test Events"
             ];
 
             // Adiciona currency e value se fornecidos
@@ -122,6 +123,9 @@ class KwaiService
                 'click_id' => $clickId,
                 'pixel_id' => $this->pixelId,
                 'value' => $value,
+                'is_test_mode' => $this->isTest,
+                'trackFlag' => $payload['trackFlag'],
+                'testFlag' => $payload['testFlag'],
                 'payload' => $payload,
             ]);
 
@@ -146,6 +150,9 @@ class KwaiService
                     'http_code' => $response->status(),
                     'result' => $responseData['result'] ?? null,
                     'success' => $success,
+                    'is_test_mode' => $this->isTest,
+                    'trackFlag_sent' => $payload['trackFlag'],
+                    'full_response' => $responseData,
                 ]);
 
                 return [

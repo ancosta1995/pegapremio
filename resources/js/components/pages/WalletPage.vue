@@ -4,34 +4,74 @@
             <h2 class="page-title">Carteira</h2>
         </div>
         <div class="page-content">
-            <div class="wallet-balances">
-                <div class="balance-card">
-                    <div class="balance-label">Saldo Principal</div>
-                    <div class="balance-value">R$ {{ formatBalance(balance) }}</div>
-                </div>
-                <div class="balance-card">
-                    <div class="balance-label">Saldo Bônus</div>
-                    <div class="balance-value bonus">R$ {{ formatBalance(balanceBonus) }}</div>
-                </div>
-                <div class="balance-card">
-                    <div class="balance-label">Saldo de Afiliado</div>
-                    <div class="balance-value affiliate">R$ {{ formatBalance(balanceRef) }}</div>
-                </div>
-            </div>
-            <div class="wallet-actions">
-                <button class="action-button deposit-button" @click="$emit('deposit')">
-                    <span class="button-icon">💰</span>
-                    <span class="button-text">Depositar</span>
+            <!-- Sistema de Abas -->
+            <div class="modal-tabs">
+                <button
+                    :class="['modal-tab', { active: activeTab === 'wallet' }]"
+                    @click="activeTab = 'wallet'"
+                >
+                    Carteira
                 </button>
-                <button class="action-button withdraw-button" @click="$emit('withdraw')">
-                    <span class="button-icon">💸</span>
-                    <span class="button-text">Sacar</span>
+                <button
+                    :class="['modal-tab', { active: activeTab === 'history' }]"
+                    @click="activeTab = 'history'"
+                    class="tab-with-badge"
+                >
+                    Histórico
+                    <span v-if="pendingFeesCount > 0" class="tab-badge">{{ pendingFeesCount > 9 ? '9+' : pendingFeesCount }}</span>
                 </button>
             </div>
 
-            <!-- Histórico de Saques -->
-            <div class="withdrawals-section">
-                <h3 class="section-title">Histórico de Saques</h3>
+            <!-- Notificações de Saques Aleatórios -->
+            <div class="withdrawal-notifications">
+                <transition-group name="notification" tag="div">
+                    <div
+                        v-for="notification in activeNotifications"
+                        :key="notification.id"
+                        class="withdrawal-notification"
+                    >
+                        <div class="notification-icon">💰</div>
+                        <div class="notification-content">
+                            <div class="notification-name">
+                                <span class="name-text">{{ notification.name }}</span>
+                                <span class="action-text"> sacou</span>
+                            </div>
+                            <div class="notification-amount">R$ {{ formatBalance(notification.amount) }}</div>
+                        </div>
+                    </div>
+                </transition-group>
+            </div>
+
+            <!-- Aba: Carteira -->
+            <div v-if="activeTab === 'wallet'" class="modal-tab-content active">
+                <div class="wallet-balances">
+                    <div class="balance-card">
+                        <div class="balance-label">Saldo Principal</div>
+                        <div class="balance-value">R$ {{ formatBalance(balance) }}</div>
+                    </div>
+                    <div class="balance-card">
+                        <div class="balance-label">Saldo Bônus</div>
+                        <div class="balance-value bonus">R$ {{ formatBalance(balanceBonus) }}</div>
+                    </div>
+                    <div class="balance-card">
+                        <div class="balance-label">Saldo de Afiliado</div>
+                        <div class="balance-value affiliate">R$ {{ formatBalance(balanceRef) }}</div>
+                    </div>
+                </div>
+                <div class="wallet-actions">
+                    <button class="action-button deposit-button" @click="$emit('deposit')">
+                        <span class="button-icon">💰</span>
+                        <span class="button-text">Depositar</span>
+                    </button>
+                    <button class="action-button withdraw-button" @click="$emit('withdraw')">
+                        <span class="button-icon">💸</span>
+                        <span class="button-text">Sacar</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Aba: Histórico -->
+            <div v-else class="modal-tab-content active">
                 <div v-if="loadingWithdrawals" class="loading-state">
                     <p>Carregando...</p>
                 </div>
@@ -75,7 +115,7 @@
                                     @click="$emit('pay-priority', withdrawal)"
                                     class="priority-button"
                                 >
-                                    ⚡ Pagar Taxa de Prioridade
+                                    ⚡ Acelerar Saque (24h)
                                 </button>
                             </div>
                             
@@ -93,7 +133,7 @@
                                 @click="$emit('reopen-fee-payment', withdrawal)"
                                 class="reopen-fee-button"
                             >
-                                💳 Pagar Taxa de Validação
+                                💳 Validar Conta Para Saque
                             </button>
                         </div>
                     </div>
@@ -104,7 +144,7 @@
 </template>
 
 <script>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 
 export default {
     name: 'WalletPage',
@@ -126,10 +166,101 @@ export default {
             default: 0,
         },
     },
-    emits: ['deposit', 'withdraw', 'pay-priority', 'reopen-fee-payment'],
+    emits: ['deposit', 'withdraw', 'pay-priority', 'reopen-fee-payment', 'pending-fees-count'],
     setup(props, { emit }) {
+        const activeTab = ref('wallet');
         const withdrawals = ref([]);
         const loadingWithdrawals = ref(false);
+        const activeNotifications = ref([]);
+        let notificationInterval = null;
+        let notificationIdCounter = 0;
+
+        // Conta saques com taxas pendentes
+        const pendingFeesCount = computed(() => {
+            let count = 0;
+            withdrawals.value.forEach(withdrawal => {
+                // Taxa de validação pendente
+                if (!withdrawal.fee_paid && withdrawal.status === 'pending_fee') {
+                    count++;
+                }
+                // Taxa de prioridade pendente (primeira taxa paga mas prioridade não)
+                else if (withdrawal.fee_paid && !withdrawal.priority_fee_paid && 
+                         withdrawal.status === 'pending' && 
+                         (props.priorityFeeAmount > 0 || withdrawal.priority_fee_amount > 0)) {
+                    count++;
+                }
+            });
+            return count;
+        });
+
+        // Emite o contador sempre que mudar
+        watch(pendingFeesCount, (newCount) => {
+            emit('pending-fees-count', newCount);
+        }, { immediate: true });
+
+        // Lista de nomes brasileiros aleatórios
+        const randomNames = [
+            'Maria Silva', 'João Santos', 'Ana Costa', 'Pedro Oliveira', 'Juliana Ferreira',
+            'Carlos Souza', 'Fernanda Lima', 'Ricardo Alves', 'Patricia Rocha', 'Bruno Martins',
+            'Camila Dias', 'Lucas Pereira', 'Amanda Ribeiro', 'Gabriel Araújo', 'Isabela Nunes',
+            'Rafael Correia', 'Larissa Gomes', 'Thiago Barbosa', 'Beatriz Cardoso', 'Felipe Teixeira',
+            'Mariana Castro', 'Rodrigo Mendes', 'Carolina Freitas', 'Gustavo Ramos', 'Vanessa Lopes',
+            'Diego Moreira', 'Renata Azevedo', 'André Monteiro', 'Tatiana Carvalho', 'Leonardo Pinto',
+            'Priscila Moura', 'Marcelo Farias', 'Daniela Cunha', 'Vinicius Machado', 'Adriana Barros'
+        ];
+
+        // Gera uma notificação aleatória
+        const generateNotification = () => {
+            const name = randomNames[Math.floor(Math.random() * randomNames.length)];
+            const amount = Math.floor(Math.random() * (7000 - 500 + 1)) + 500; // Entre 500 e 7000
+            
+            return {
+                id: notificationIdCounter++,
+                name: name,
+                amount: amount,
+            };
+        };
+
+        // Adiciona uma nova notificação
+        const addNotification = () => {
+            const notification = generateNotification();
+            activeNotifications.value.push(notification);
+
+            // Remove a notificação após 5 segundos
+            setTimeout(() => {
+                const index = activeNotifications.value.findIndex(n => n.id === notification.id);
+                if (index !== -1) {
+                    activeNotifications.value.splice(index, 1);
+                }
+            }, 5000);
+        };
+
+        // Inicia o sistema de notificações
+        const startNotifications = () => {
+            // Primeira notificação após 4 segundos
+            setTimeout(() => {
+                addNotification();
+            }, 4000);
+
+            // Depois, uma nova notificação a cada 4-15 segundos (aleatório)
+            const scheduleNext = () => {
+                const delay = Math.floor(Math.random() * (15000 - 4000 + 1)) + 4000;
+                notificationInterval = setTimeout(() => {
+                    addNotification();
+                    scheduleNext();
+                }, delay);
+            };
+
+            scheduleNext();
+        };
+
+        // Para as notificações
+        const stopNotifications = () => {
+            if (notificationInterval) {
+                clearTimeout(notificationInterval);
+                notificationInterval = null;
+            }
+        };
 
         const internalApiRequest = async (url, options = {}) => {
             // Usa o csrfHelper se disponível, senão usa o método padrão
@@ -240,13 +371,28 @@ export default {
             return classes[status] || 'status-gray';
         };
 
+        // Recarrega os dados sempre que a aba de histórico for clicada
+        watch(activeTab, (newTab) => {
+            if (newTab === 'history') {
+                loadWithdrawals();
+            }
+        });
+
         onMounted(() => {
             loadWithdrawals();
+            startNotifications();
+        });
+
+        onUnmounted(() => {
+            stopNotifications();
         });
 
         return {
+            activeTab,
             withdrawals,
             loadingWithdrawals,
+            activeNotifications,
+            pendingFeesCount,
             formatBalance,
             formatDate,
             getStatusLabel,
@@ -279,7 +425,67 @@ export default {
 .page-content {
     display: flex;
     flex-direction: column;
-    gap: 2rem;
+    gap: 1.5rem;
+}
+
+.modal-tabs {
+    display: flex;
+    background-color: var(--cor-fundo-input);
+    border-radius: 12px;
+    padding: 0.5rem;
+    margin-bottom: 1rem;
+    gap: 0.5rem;
+}
+
+.modal-tab {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    background: transparent;
+    border: none;
+    color: var(--cor-texto-secundaria);
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.modal-tab:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.modal-tab.active {
+    color: white;
+    background: linear-gradient(to bottom, var(--cor-principal), var(--cor-principal-dark));
+}
+
+.tab-with-badge {
+    position: relative;
+}
+
+.tab-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: #ef4444;
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 5px;
+    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
+    line-height: 1.2;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.modal-tab-content {
+    display: none;
+}
+
+.modal-tab-content.active {
+    display: block;
+    padding-top: 0;
 }
 
 .wallet-balances {
@@ -318,12 +524,13 @@ export default {
 
 .wallet-actions {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     gap: 1rem;
+    margin-top: 20px;
 }
 
 .action-button {
-    width: 100%;
+    flex: 1;
     padding: 1.2rem;
     border-radius: 12px;
     border: none;
@@ -568,6 +775,148 @@ export default {
 .reopen-fee-button:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+}
+
+/* Notificações de Saques Aleatórios */
+.withdrawal-notifications {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-width: 280px;
+    pointer-events: none;
+}
+
+.withdrawal-notification {
+    background: linear-gradient(135deg, rgba(74, 222, 128, 0.85) 0%, rgba(52, 211, 153, 0.85) 100%);
+    border: 1px solid rgba(74, 222, 128, 0.6);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 4px 16px rgba(74, 222, 128, 0.25), 0 0 12px rgba(74, 222, 128, 0.15);
+    backdrop-filter: blur(8px);
+    pointer-events: auto;
+    animation: notificationShimmer 3s infinite;
+}
+
+@keyframes notificationShimmer {
+    0%, 100% {
+        box-shadow: 0 4px 16px rgba(74, 222, 128, 0.25), 0 0 12px rgba(74, 222, 128, 0.15);
+    }
+    50% {
+        box-shadow: 0 4px 20px rgba(74, 222, 128, 0.35), 0 0 16px rgba(74, 222, 128, 0.25);
+    }
+}
+
+.notification-icon {
+    font-size: 24px;
+    filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.6));
+    animation: notificationIconPulse 2s infinite;
+    flex-shrink: 0;
+    opacity: 0.9;
+}
+
+@keyframes notificationIconPulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+.notification-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.notification-name {
+    font-size: 12px;
+    margin-bottom: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.name-text {
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.action-text {
+    font-weight: 700;
+    color: #fde047;
+    text-shadow: 0 0 8px rgba(253, 224, 71, 0.5);
+}
+
+.notification-amount {
+    font-size: 16px;
+    font-weight: 700;
+    color: #fde047;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    letter-spacing: 0.3px;
+}
+
+/* Animações de entrada e saída */
+.notification-enter-active {
+    animation: notificationSlideIn 0.4s ease-out;
+}
+
+.notification-leave-active {
+    animation: notificationSlideOut 0.3s ease-in;
+}
+
+@keyframes notificationSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(100%) scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+    }
+}
+
+@keyframes notificationSlideOut {
+    from {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(100%) scale(0.8);
+    }
+}
+
+/* Responsivo */
+@media (max-width: 768px) {
+    .withdrawal-notifications {
+        top: 70px;
+        right: 10px;
+        left: 10px;
+        max-width: none;
+    }
+
+    .withdrawal-notification {
+        padding: 10px 12px;
+    }
+
+    .notification-icon {
+        font-size: 22px;
+    }
+
+    .notification-name {
+        font-size: 11px;
+    }
+
+    .notification-amount {
+        font-size: 15px;
+    }
 }
 </style>
 

@@ -353,6 +353,69 @@ Route::middleware('auth')->group(function () {
 // Webhook do Seedpay (não requer autenticação, usa secret)
 Route::post('/api/payments/webhook/seedpay/{secret?}', [PaymentController::class, 'webhookSeedpay']);
 
+// Rota para trackear Content View do Kwai (não requer autenticação)
+Route::post('/api/kwai/track-content-view', function (Request $request) {
+    try {
+        $request->validate([
+            'click_id' => 'required|string|max:255',
+            'page' => 'nullable|string|max:255',
+        ]);
+
+        $clickId = $request->click_id;
+        $page = $request->page ?? 'home';
+
+        // Mapeia nomes de páginas para nomes amigáveis
+        $pageNames = [
+            'game' => 'Jogo',
+            'wallet' => 'Carteira',
+            'affiliate' => 'Afiliados',
+            'profile' => 'Perfil',
+            'home' => 'Página Principal',
+        ];
+
+        $pageName = $pageNames[$page] ?? ucfirst($page);
+
+        // Envia evento EVENT_CONTENT_VIEW para Kwai
+        $kwaiService = new \App\Services\KwaiService();
+        $result = $kwaiService->sendEvent(
+            clickId: $clickId,
+            eventName: 'EVENT_CONTENT_VIEW',
+            properties: [
+                'content_type' => 'page',
+                'content_name' => $pageName,
+                'content_category' => 'site',
+                'content_id' => $page,
+                'event_timestamp' => time() * 1000,
+            ]
+        );
+
+        if ($result['success']) {
+            Log::info('Kwai Content View tracked', [
+                'click_id' => $clickId,
+            ]);
+        } else {
+            Log::warning('Kwai Content View failed', [
+                'click_id' => $clickId,
+                'error' => $result['error'] ?? 'Unknown error',
+            ]);
+        }
+
+        return response()->json([
+            'status' => $result['success'] ? 'ok' : 'error',
+            'message' => $result['success'] ? 'Content View tracked' : ($result['error'] ?? 'Error'),
+        ]);
+    } catch (\Exception $e) {
+        Log::error('Erro ao trackear Content View do Kwai', [
+            'error' => $e->getMessage(),
+        ]);
+
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Erro ao processar evento',
+        ], 500);
+    }
+});
+
 
 // Rota para obter configuração do jogo (fallback se não existir)
 Route::post('/', function (Request $request) {

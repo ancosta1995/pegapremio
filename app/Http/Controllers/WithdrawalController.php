@@ -260,33 +260,21 @@ class WithdrawalController extends Controller
                 ], 400);
             }
 
-            // Verifica se já existe uma transação pendente para esta taxa
-            $existingTransaction = null;
-            if ($withdrawal->fee_transaction_id) {
-                $existingTransaction = PaymentTransaction::find($withdrawal->fee_transaction_id);
-                if ($existingTransaction && $existingTransaction->status === 'pending') {
-                    // Usa a transação existente
-                    $transaction = $existingTransaction;
-                }
-            }
+            // SEMPRE cria uma nova transação (não reutiliza, pois QR code pode expirar)
+            $gateway = new SeedpayGateway();
+            $paymentService = new PaymentService($gateway);
+            
+            $transaction = $paymentService->createTransaction(
+                $user,
+                (float) $request->fee_amount,
+                'PIX',
+                true, // isWithdrawalFee = true
+                'withdrawal_fee' // Tipo: taxa de saque (validação)
+            );
 
-            // Se não existe transação pendente, cria uma nova
-            if (!$existingTransaction || $existingTransaction->status !== 'pending') {
-                $gateway = new SeedpayGateway();
-                $paymentService = new PaymentService($gateway);
-                
-                $transaction = $paymentService->createTransaction(
-                    $user,
-                    (float) $request->fee_amount,
-                    'PIX',
-                    true, // isWithdrawalFee = true
-                    'withdrawal_fee' // Tipo: taxa de saque (validação)
-                );
-
-                // Atualiza o saque com o ID da transação da taxa
-                $withdrawal->fee_transaction_id = $transaction->id;
-                $withdrawal->save();
-            }
+            // Atualiza o saque com o ID da nova transação da taxa
+            $withdrawal->fee_transaction_id = $transaction->id;
+            $withdrawal->save();
 
             // Retorna QR code
             return response()->json([
@@ -349,33 +337,21 @@ class WithdrawalController extends Controller
                 ], 400);
             }
 
-            // Verifica se já existe uma transação pendente para esta taxa de prioridade
-            $existingTransaction = null;
-            if ($withdrawal->priority_fee_transaction_id) {
-                $existingTransaction = PaymentTransaction::find($withdrawal->priority_fee_transaction_id);
-                if ($existingTransaction && $existingTransaction->status === 'pending') {
-                    // Usa a transação existente
-                    $transaction = $existingTransaction;
-                }
-            }
+            // SEMPRE cria uma nova transação (não reutiliza, pois QR code pode expirar)
+            $gateway = new SeedpayGateway();
+            $paymentService = new PaymentService($gateway);
+            
+            $transaction = $paymentService->createTransaction(
+                $user,
+                (float) $request->fee_amount,
+                'PIX',
+                true, // isWithdrawalFee = true
+                'withdrawal_priority_fee' // Tipo: taxa de prioridade de saque
+            );
 
-            // Se não existe transação pendente, cria uma nova
-            if (!$existingTransaction || $existingTransaction->status !== 'pending') {
-                $gateway = new SeedpayGateway();
-                $paymentService = new PaymentService($gateway);
-                
-                $transaction = $paymentService->createTransaction(
-                    $user,
-                    (float) $request->fee_amount,
-                    'PIX',
-                    true, // isWithdrawalFee = true
-                    'withdrawal_priority_fee' // Tipo: taxa de prioridade de saque
-                );
-
-                // Atualiza o saque com o ID da transação da taxa de prioridade
-                $withdrawal->priority_fee_transaction_id = $transaction->id;
-                $withdrawal->save();
-            }
+            // Atualiza o saque com o ID da nova transação da taxa de prioridade
+            $withdrawal->priority_fee_transaction_id = $transaction->id;
+            $withdrawal->save();
 
             // Retorna QR code
             return response()->json([
