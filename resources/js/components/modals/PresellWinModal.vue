@@ -3,7 +3,7 @@
         <div class="result-modal-content" style="max-width: 500px;">
             <button class="modal-close" @click="$emit('close')">&times;</button>
             <div class="prize-multiplier-row">
-                <img :src="asset('assets/prize2.png')" alt="Prêmio" class="prize-image">
+                <img :src="asset('assets/prize-open.png')" alt="Prêmio" class="prize-image">
                 <p class="multiplier-text" v-if="multiplier > 0">{{ formatMultiplier(multiplier) }}x</p>
             </div>
             <h3 style="color: #22c55e; margin-bottom: 10px;">🎉 Parabéns! Você Ganhou! 🎉</h3>

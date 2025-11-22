@@ -474,9 +474,9 @@ export default {
 
         const prizeImages = ref([
             asset('assets/prize1.png'),
-            asset('assets/prize2.png'),
-            asset('assets/prize3.png'),
-            asset('assets/prize4.png'),
+            asset('assets/prize1.png'),
+            asset('assets/prize1.png'),
+            asset('assets/prize1.png'),
         ]);
 
         // API Helper
