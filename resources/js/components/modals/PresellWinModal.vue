@@ -20,19 +20,6 @@
             </p>
             <button 
                 class="result-modal-button" 
-                @click="$emit('register')"
-                style="
-                    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-                    font-size: 18px;
-                    font-weight: 700;
-                    padding: 16px 32px;
-                    box-shadow: 0 4px 15px rgba(34, 197, 94, 0.4);
-                "
-            >
-                🎁 Criar Conta e Jogar Agora
-            </button>
-            <button 
-                class="result-modal-button" 
                 @click="$emit('close')"
                 style="
                     background: transparent;

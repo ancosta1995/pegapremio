@@ -26,9 +26,6 @@
                     <button id="presell-deposit-btn" class="header-btn deposit-btn" style="cursor: default;">
                         Depositar
                     </button>
-                    <button @click="openRegisterModal" class="header-btn register-btn" style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);">
-                        Criar Conta e Jogar
-                    </button>
                 </template>
                 <template v-else-if="!isUserLoggedIn">
                     <button @click="openLoginModal" class="header-btn login-btn">Entrar</button>
