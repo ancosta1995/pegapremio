@@ -171,4 +171,12 @@ class User extends Authenticatable
     {
         return $this->getRolloverProgress() >= 1.0;
     }
+
+    /**
+     * Verifica se o usuário pode acessar o painel admin do Filament
+     */
+    public function canAccessPanel(\Filament\Panel $panel): bool
+    {
+        return $this->is_admin ?? false;
+    }
 }
