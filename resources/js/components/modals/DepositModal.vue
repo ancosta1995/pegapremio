@@ -84,17 +84,22 @@
 </template>
 
 <script>
-import { ref } from 'vue';
+import { ref, computed, watch } from 'vue';
 
 export default {
     name: 'DepositModal',
+    props: {
+        minDepositAmount: {
+            type: Number,
+            default: 10.00
+        }
+    },
     setup(props, { emit }) {
         const amount = ref('');
         const loading = ref(false);
         const showQrCode = ref(false);
         const qrCodeImage = ref('');
         const pixCode = ref('');
-        const quickAmounts = ref([10, 25, 50, 100, 200, 500]);
         const transactionId = ref(null);
         const statusCheckInterval = ref(null);
 
@@ -102,6 +107,33 @@ export default {
         const getCsrfToken = () => {
             return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
         };
+
+        // Calcula os valores rápidos dinamicamente baseado no mínimo
+        const quickAmounts = computed(() => {
+            const min = props.minDepositAmount || 10.00;
+            const amounts = [];
+            
+            // Primeiro valor sempre é o mínimo
+            amounts.push(min);
+            
+            // Calcula os próximos valores baseado no mínimo
+            // Se mínimo <= 10: 10, 25, 50, 100, 200, 500
+            // Se mínimo <= 25: min, 50, 100, 200, 500, 1000
+            // Se mínimo <= 50: min, 100, 200, 500, 1000, 2000
+            // Se mínimo > 50: min, min*2, min*5, min*10, min*20, min*50
+            if (min <= 10) {
+                amounts.push(25, 50, 100, 200, 500);
+            } else if (min <= 25) {
+                amounts.push(50, 100, 200, 500, 1000);
+            } else if (min <= 50) {
+                amounts.push(100, 200, 500, 1000, 2000);
+            } else {
+                // Para valores maiores, usa múltiplos do mínimo
+                amounts.push(min * 2, min * 5, min * 10, min * 20, min * 50);
+            }
+            
+            return amounts;
+        });
 
         const formatAmount = (event) => {
             let value = event.target.value.replace(/\D/g, '');

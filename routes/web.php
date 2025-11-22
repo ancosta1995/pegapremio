@@ -40,6 +40,15 @@ Route::get('/api/csrf-token', function () {
     ]);
 });
 
+// Rota pública para obter valor mínimo de depósito (sem autenticação)
+Route::get('/api/min-deposit', function () {
+    $minDeposit = SystemSetting::get('min_deposit_amount', 10.00);
+    return response()->json([
+        'success' => true,
+        'min_deposit_amount' => (float) $minDeposit,
+    ]);
+});
+
 // Rota para capturar kwai_click_id
 Route::post('/kwai/click', function (Request $request) {
     try {
@@ -273,6 +282,7 @@ Route::get('/api/user', function (Request $request) {
     $requiredWager = $totalDeposited * $rolloverRequirement;
     $rolloverProgress = $requiredWager > 0 ? min(1.0, $totalWagered / $requiredWager) : 1.0;
     $priorityFeeAmount = SystemSetting::get('withdrawal_priority_fee', 0.00);
+    $minDepositAmount = SystemSetting::get('min_deposit_amount', 10.00);
     
     return response()->json([
         'success' => true,
@@ -293,6 +303,7 @@ Route::get('/api/user', function (Request $request) {
             'rollover_progress' => $rolloverProgress,
             'rollover_required' => $requiredWager,
             'priority_fee_amount' => (float) $priorityFeeAmount,
+            'min_deposit_amount' => (float) $minDepositAmount,
         ],
     ]);
 });

@@ -1,5 +1,13 @@
 <template>
     <div>
+        <!-- Loading Overlay -->
+        <div v-if="isInitialLoading" class="loading-overlay">
+            <div class="loading-spinner">
+                <div class="spinner"></div>
+                <p>Carregando...</p>
+            </div>
+        </div>
+
         <!-- Confetti Container -->
         <div id="confetti-container" ref="confettiContainer"></div>
 
@@ -9,9 +17,15 @@
         <audio ref="lossSound" :src="asset('assets/sounds/loss.wav')"></audio>
 
         <!-- Header -->
-        <div class="game-header">
+        <div class="game-header" :class="{ 'loading-state': isInitialLoading }">
             <div class="header-left">
-                <img :src="asset('assets/logo-1.png')" alt="Logo" style="height: 35px;">
+                <img 
+                    :src="asset('assets/logo-1.png')" 
+                    alt="Logo" 
+                    style="height: 35px;"
+                    @load="(e) => e.target.classList.add('loaded')"
+                    @error="(e) => e.target.classList.add('loaded')"
+                >
             </div>
             <div class="header-right">
                 <template v-if="isPresellMode">
@@ -26,6 +40,11 @@
                     <button id="presell-deposit-btn" class="header-btn deposit-btn" style="cursor: default;">
                         Depositar
                     </button>
+                </template>
+                <template v-else-if="isInitialLoading">
+                    <div class="header-loading">
+                        <span class="balance" style="opacity: 0.7; font-size: 14px;">Carregando...</span>
+                    </div>
                 </template>
                 <template v-else-if="!isUserLoggedIn">
                     <button @click="openLoginModal" class="header-btn login-btn">Entrar</button>
@@ -46,8 +65,20 @@
             <template v-if="currentPage === 'game'">
             <div class="game-scene">
                 <div class="scene-top">
-                    <img :src="asset('assets/border12.png')" class="background-trees" alt="Fundo de Natal">
-                    <img :src="asset('assets/papainelupdate.png')" class="santa-character" alt="Papai Noel">
+                    <img 
+                        :src="asset('assets/border12.png')" 
+                        class="background-trees" 
+                        alt="Fundo de Natal"
+                        @load="(e) => e.target.classList.add('loaded')"
+                        @error="(e) => e.target.classList.add('loaded')"
+                    >
+                    <img 
+                        :src="asset('assets/papainelupdate.png')" 
+                        class="santa-character" 
+                        alt="Papai Noel"
+                        @load="(e) => e.target.classList.add('loaded')"
+                        @error="(e) => e.target.classList.add('loaded')"
+                    >
                 </div>
                 <div
                     id="game-area"
@@ -62,8 +93,8 @@
                             :style="{ backgroundImage: `url(${asset('assets/rop2.png')})` }"
                         ></div>
                         <div id="claw-hook">
-                            <img v-if="hasHookLeft" :src="asset('assets/hook_left-sheet0.png')" alt="">
-                            <img :src="asset('assets/hook_right-sheet0.png')" alt="">
+                            <img v-if="hasHookLeft" :src="asset('assets/hook_left-sheet0.png')" alt="" class="loaded">
+                            <img :src="asset('assets/hook_right-sheet0.png')" alt="" class="loaded">
                         </div>
                     </div>
                     <img
@@ -284,6 +315,7 @@
 
         <DepositModal
             v-if="showDepositModal"
+            :min-deposit-amount="minDepositAmount"
             @close="closeDepositModal"
         />
 
@@ -411,6 +443,9 @@ export default {
         const presell = usePresell(internalApiRequest, asset);
         const { isPresellMode, presellBetAmount, presellFreeRounds, presellRoundsPlayed, presellMultipliers, presellLoading, presellFakeBalance, startPresellTour: startPresellTourFromComposable, loadPresellConfig } = presell;
         
+        // Estado de loading inicial
+        const isInitialLoading = ref(true);
+        
         // Inicializa autenticação
         const userAuth = useUserAuth(internalApiRequest);
         const { isUserLoggedIn, username, userEmail, userPhone, balance, balanceBonus, userBalanceRef, userReferralCode, userCpa, checkAuthentication, handleLoggedIn: handleLoggedInAuth, handleRegistered: handleRegisteredAuth, handleLogout } = userAuth;
@@ -426,6 +461,9 @@ export default {
             canPayPriority, priorityFeeAmount, priorityFeePaid, pendingFeesCount,
             loadPendingFeesCount
         } = withdrawals;
+        
+        // Valor mínimo de depósito (carregado do servidor)
+        const minDepositAmount = ref(10.00);
         
         // Estados do jogo
         const betLevels = ref([0.50, 1.00, 2.00, 5.00, 10.00]);
@@ -581,23 +619,10 @@ export default {
                     });
             }
             
-            // Sempre cria os itens, independente de estar logado ou não
-            // Usa nextTick e setTimeout para garantir que o DOM está renderizado
-            await nextTick();
-            
-            // Aguarda um pouco mais para garantir que o gameArea está totalmente renderizado
-            setTimeout(() => {
-                if (gameArea.value) {
-                    createItems();
-                    animateItems();
-                } else {
-                    // Se ainda não estiver disponível, tenta novamente
-                    setTimeout(() => {
-                        createItems();
-                        animateItems();
-                    }, 300);
-                }
-            }, 300);
+            // Os itens já foram criados no onMounted, apenas garante que a animação está rodando
+            if (gameArea.value && items.value.length > 0) {
+                animateItems();
+            }
         };
 
         // Funções de navegação, modais e saques já estão nos composables
@@ -610,22 +635,62 @@ export default {
         const closeWithdrawalFeePaymentModal = () => modals.closeWithdrawalFeePaymentModal();
         const closeWithdrawalFeeModal = () => modals.closeWithdrawalFeeModal();
         const closeWithdrawalQueueModal = () => modals.closeWithdrawalQueueModal();
-        const openDepositModal = () => modals.openDepositModal(isUserLoggedIn, () => {
-            // Para o tour se estiver ativo antes de abrir o modal de registro
-            if (currentTour) {
-                try {
-                    if (typeof currentTour.isActive === 'function' && currentTour.isActive()) {
-                        currentTour.complete();
-                    } else if (currentTour.currentStep) {
-                        currentTour.complete();
+        const openDepositModal = async () => {
+            // Se não estiver logado, abre modal de registro
+            if (!isUserLoggedIn.value) {
+                // Para o tour se estiver ativo antes de abrir o modal de registro
+                if (currentTour) {
+                    try {
+                        if (typeof currentTour.isActive === 'function' && currentTour.isActive()) {
+                            currentTour.complete();
+                        } else if (currentTour.currentStep) {
+                            currentTour.complete();
+                        }
+                        currentTour = null;
+                    } catch (e) {
+                        console.log('Erro ao parar tour:', e);
                     }
-                    currentTour = null;
-                } catch (e) {
-                    console.log('Erro ao parar tour:', e);
                 }
+                modals.openRegisterModal();
+                return;
             }
-            modals.openRegisterModal();
-        });
+            
+            // Busca o valor mínimo de depósito antes de abrir o modal (endpoint público, mais rápido)
+            try {
+                const response = await fetch('/api/min-deposit', {
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                    },
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.min_deposit_amount !== undefined) {
+                        minDepositAmount.value = parseFloat(data.min_deposit_amount);
+                    }
+                }
+            } catch (error) {
+                console.error('Erro ao carregar valor mínimo de depósito:', error);
+                // Mantém o valor atual (pode ser o padrão 10.00 ou um valor já carregado)
+            }
+            
+            // Abre o modal após garantir que o valor está carregado
+            modals.openDepositModal(isUserLoggedIn, () => {
+                // Para o tour se estiver ativo antes de abrir o modal de registro
+                if (currentTour) {
+                    try {
+                        if (typeof currentTour.isActive === 'function' && currentTour.isActive()) {
+                            currentTour.complete();
+                        } else if (currentTour.currentStep) {
+                            currentTour.complete();
+                        }
+                        currentTour = null;
+                    } catch (e) {
+                        console.log('Erro ao parar tour:', e);
+                    }
+                }
+                modals.openRegisterModal();
+            });
+        };
         const closeDepositModal = () => modals.closeDepositModal();
         const openWithdrawModal = () => modals.openWithdrawModal(isUserLoggedIn, () => {
             // Para o tour se estiver ativo antes de abrir o modal de registro
@@ -715,15 +780,19 @@ export default {
         const handleLoggedIn = async (data) => {
             handleLoggedInAuth(data);
             initializeGame();
-            // Carregar contador de taxas pendentes após login
+            // Carregar contador de taxas pendentes e valor mínimo de depósito após login
             try {
                 const userResponse = await internalApiRequest('/api/user');
-                const feeAmount = userResponse.success && userResponse.user 
-                    ? parseFloat(userResponse.user.priority_fee_amount || 0) 
-                    : 0;
-                await loadPendingFeesCount(feeAmount);
+                if (userResponse.success && userResponse.user) {
+                    const feeAmount = parseFloat(userResponse.user.priority_fee_amount || 0);
+                    await loadPendingFeesCount(feeAmount);
+                    // Atualiza valor mínimo de depósito
+                    if (userResponse.user.min_deposit_amount !== undefined) {
+                        minDepositAmount.value = parseFloat(userResponse.user.min_deposit_amount);
+                    }
+                }
             } catch (error) {
-                console.error('Erro ao carregar contador de taxas pendentes:', error);
+                console.error('Erro ao carregar dados do usuário:', error);
                 await loadPendingFeesCount(0);
             }
         };
@@ -731,15 +800,19 @@ export default {
         // Wrapper para handleRegistered que passa os parâmetros corretos (o composable já faz tudo)
         const handleRegistered = async (data) => {
             await handleRegisteredAuth(data, priorityFeeAmount, closeRegisterModal, currentTour);
-            // Carregar contador de taxas pendentes após registro
+            // Carregar contador de taxas pendentes e valor mínimo de depósito após registro
             try {
                 const userResponse = await internalApiRequest('/api/user');
-                const feeAmount = userResponse.success && userResponse.user 
-                    ? parseFloat(userResponse.user.priority_fee_amount || 0) 
-                    : 0;
-                await loadPendingFeesCount(feeAmount);
+                if (userResponse.success && userResponse.user) {
+                    const feeAmount = parseFloat(userResponse.user.priority_fee_amount || 0);
+                    await loadPendingFeesCount(feeAmount);
+                    // Atualiza valor mínimo de depósito
+                    if (userResponse.user.min_deposit_amount !== undefined) {
+                        minDepositAmount.value = parseFloat(userResponse.user.min_deposit_amount);
+                    }
+                }
             } catch (error) {
-                console.error('Erro ao carregar contador de taxas pendentes:', error);
+                console.error('Erro ao carregar dados do usuário:', error);
                 await loadPendingFeesCount(0);
             }
         };
@@ -830,6 +903,16 @@ export default {
                     trackContentView();
                 }, 300);
             }
+            
+            // Cria os itens imediatamente quando a página do jogo é renderizada
+            if (newPage === 'game') {
+                nextTick(() => {
+                    if (gameArea.value && items.value.length === 0) {
+                        createItems();
+                        animateItems();
+                    }
+                });
+            }
         });
 
         onMounted(async () => {
@@ -884,21 +967,78 @@ export default {
             // Verificar autenticação primeiro
             await checkAuthentication();
             
-            // Carregar contador de taxas pendentes se estiver logado
+            // Carregar contador de taxas pendentes e valor mínimo de depósito se estiver logado
             if (isUserLoggedIn.value) {
                 // Busca o priorityFeeAmount primeiro para passar como parâmetro
                 try {
                     const userResponse = await internalApiRequest('/api/user');
-                    const feeAmount = userResponse.success && userResponse.user 
-                        ? parseFloat(userResponse.user.priority_fee_amount || 0) 
-                        : 0;
-                    await loadPendingFeesCount(feeAmount);
+                    if (userResponse.success && userResponse.user) {
+                        const feeAmount = parseFloat(userResponse.user.priority_fee_amount || 0);
+                        await loadPendingFeesCount(feeAmount);
+                        // Atualiza valor mínimo de depósito
+                        if (userResponse.user.min_deposit_amount !== undefined) {
+                            minDepositAmount.value = parseFloat(userResponse.user.min_deposit_amount);
+                        }
+                    }
                 } catch (error) {
-                    console.error('Erro ao carregar contador de taxas pendentes:', error);
+                    console.error('Erro ao carregar dados do usuário:', error);
                     // Tenta carregar sem o feeAmount
                     await loadPendingFeesCount(0);
                 }
             }
+            
+            // Aguarda o DOM estar pronto
+            await nextTick();
+            
+            // Cria os itens do jogo imediatamente se a página do jogo estiver ativa
+            // Isso garante que bombas e presentes apareçam rapidamente
+            if (currentPage.value === 'game') {
+                // Tenta criar imediatamente
+                nextTick(() => {
+                    if (gameArea.value && items.value.length === 0) {
+                        createItems();
+                        animateItems();
+                    } else if (!gameArea.value) {
+                        // Se o gameArea ainda não estiver disponível, tenta novamente rapidamente
+                        const checkInterval = setInterval(() => {
+                            if (gameArea.value && items.value.length === 0) {
+                                createItems();
+                                animateItems();
+                                clearInterval(checkInterval);
+                            }
+                        }, 10); // Verifica a cada 10ms para ser mais rápido
+                        // Timeout de segurança
+                        setTimeout(() => clearInterval(checkInterval), 200);
+                    }
+                });
+            }
+            
+            // Carrega imagens principais em paralelo (não bloqueia os itens)
+            const imagesToLoad = [
+                asset('assets/border12.png'),
+                asset('assets/papainelupdate.png'),
+                asset('assets/logo-1.png')
+            ];
+            
+            const imagePromises = imagesToLoad.map(src => {
+                return new Promise((resolve) => {
+                    const img = new Image();
+                    img.onload = () => resolve();
+                    img.onerror = () => resolve(); // Resolve mesmo se der erro para não travar
+                    img.src = src;
+                    // Timeout de segurança (1.5 segundos - não bloqueia muito)
+                    setTimeout(() => resolve(), 1500);
+                });
+            });
+            
+            // Aguarda todas as imagens ou timeout (máximo 1.5s)
+            await Promise.all(imagePromises);
+            
+            // Aguarda um pouco mais para garantir que tudo está renderizado
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // Desativa o loading inicial
+            isInitialLoading.value = false;
             
             // Verifica se veio de um registro (parâmetro na URL)
             const urlParams = new URLSearchParams(window.location.search);
@@ -963,6 +1103,7 @@ export default {
             presellRoundsPlayed,
             presellFakeBalance,
             presellLoading,
+            isInitialLoading,
             isUserLoggedIn,
             username,
             userEmail,
@@ -1037,6 +1178,7 @@ export default {
             handleReopenFeePayment,
             handlePendingFeesCount,
             pendingFeesCount,
+            minDepositAmount,
             handleLogout,
             openLoginModal,
             closeLoginModal,

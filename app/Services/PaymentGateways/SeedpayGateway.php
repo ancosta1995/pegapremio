@@ -183,6 +183,17 @@ class SeedpayGateway implements PaymentGatewayInterface
 
             $responseData = $response->json();
 
+            // Verifica se a resposta é válida
+            if (!is_array($responseData)) {
+                Log::error('Seedpay createTransaction invalid response', [
+                    'response_status' => $response->status(),
+                    'response_body' => $response->body(),
+                    'response_data' => $responseData,
+                ]);
+                
+                throw new \Exception('Resposta inválida da API do Seedpay. Verifique as credenciais e tente novamente.');
+            }
+
             Log::info('Seedpay createTransaction response', [
                 'response_keys' => array_keys($responseData),
                 'response_preview' => json_encode($responseData),
