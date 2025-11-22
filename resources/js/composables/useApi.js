@@ -1,4 +1,5 @@
 import { ref } from 'vue';
+import { generateRequestSignature } from '../utils/security.js';
 
 /**
  * Composable para requisições de API
@@ -8,20 +9,29 @@ export function useApi() {
         // Se for uma URL completa (começa com /), faz fetch direto
         if (typeof action === 'string' && action.startsWith('/')) {
             const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            const timestamp = Date.now().toString();
+            
+            // Gera assinatura para requisições POST
+            let signature = null;
+            if (Object.keys(data).length > 0) {
+                signature = generateRequestSignature(data, timestamp);
+            }
             
             const options = {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
                     'X-CSRF-TOKEN': csrfToken,
+                    'X-Request-Time': timestamp,
                 },
                 credentials: 'same-origin',
             };
             
-            // Se tiver data, muda para POST
+            // Se tiver data, muda para POST e adiciona assinatura
             if (Object.keys(data).length > 0) {
                 options.method = 'POST';
                 options.headers['Content-Type'] = 'application/json';
+                options.headers['X-Request-Signature'] = signature;
                 options.body = JSON.stringify(data);
             }
             
@@ -47,12 +57,19 @@ export function useApi() {
         
         // Obtém o token CSRF
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        const timestamp = Date.now().toString();
+        
+        // Gera assinatura para requisições
+        const requestData = { action, ...data };
+        const signature = generateRequestSignature(requestData, timestamp);
         
         const response = await fetch('', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'X-CSRF-TOKEN': csrfToken,
+                'X-Request-Time': timestamp,
+                'X-Request-Signature': signature,
             },
             body: params,
         });

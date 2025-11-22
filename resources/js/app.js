@@ -2,7 +2,11 @@ import './bootstrap';
 import './csrf-helper';
 import { createApp } from 'vue';
 import ClawGame from './components/ClawGame.vue';
-import disableDevtool from 'disable-devtool'
+import disableDevtool from 'disable-devtool';
+import { initializeSecurity } from './utils/security.js';
+
+// Inicializa proteções de segurança
+initializeSecurity();
 
 disableDevtool({
     ondevtoolopen: () => {

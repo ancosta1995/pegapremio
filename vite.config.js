@@ -38,6 +38,8 @@ export default defineConfig(({ mode, command }) => {
         // Aqui entram as config do Rollup
         build: {
             minify: 'esbuild',
+            // Remove source maps em produção para proteção
+            sourcemap: false,
 
             rollupOptions: {
                 plugins: isProduction || process.env.FORCE_OBFUSCATE === 'true' ? [

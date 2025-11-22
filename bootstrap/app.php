@@ -15,6 +15,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: [
             'api/payments/webhook/*',
         ]);
+        
+        // Adiciona headers de segurança globalmente
+        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
+        
+        // Valida assinatura de requisições (opcional - pode ser muito restritivo)
+        // Descomente se quiser ativar validação de assinatura em todas as rotas
+        // $middleware->append(\App\Http\Middleware\ValidateRequestSignature::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
