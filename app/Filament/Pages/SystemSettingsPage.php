@@ -47,6 +47,7 @@ class SystemSettingsPage extends Page implements HasForms
             'seedpay_webhook_secret' => SystemSetting::get('seedpay_webhook_secret', ''),
             'kwai_pixel_id' => SystemSetting::get('kwai_pixel_id', ''),
             'kwai_access_token' => SystemSetting::get('kwai_access_token', ''),
+            'kwai_test_token' => SystemSetting::get('kwai_test_token', ''),
             'kwai_mmpcode' => SystemSetting::get('kwai_mmpcode', 'PL'),
             'kwai_pixel_sdk_version' => SystemSetting::get('kwai_pixel_sdk_version', '9.9.9'),
             'kwai_is_test' => SystemSetting::get('kwai_is_test', true),
@@ -150,6 +151,10 @@ class SystemSettingsPage extends Page implements HasForms
                             ->maxLength(255)
                             ->required()
                             ->helperText('Token de acesso do Kwai'),
+                        Forms\Components\TextInput::make('kwai_test_token')
+                            ->label('Test Token (Click ID para testes)')
+                            ->maxLength(255)
+                            ->helperText('Token de teste que pode ser usado como click_id em modo de teste'),
                         Forms\Components\TextInput::make('kwai_mmpcode')
                             ->label('MMP Code')
                             ->default('PL')
@@ -187,6 +192,7 @@ class SystemSettingsPage extends Page implements HasForms
         SystemSetting::set('seedpay_webhook_secret', $data['seedpay_webhook_secret'], 'string');
         SystemSetting::set('kwai_pixel_id', $data['kwai_pixel_id'], 'string');
         SystemSetting::set('kwai_access_token', $data['kwai_access_token'], 'string');
+        SystemSetting::set('kwai_test_token', $data['kwai_test_token'] ?? '', 'string');
         SystemSetting::set('kwai_mmpcode', $data['kwai_mmpcode'], 'string');
         SystemSetting::set('kwai_pixel_sdk_version', $data['kwai_pixel_sdk_version'], 'string');
         SystemSetting::set('kwai_is_test', $data['kwai_is_test'], 'boolean');

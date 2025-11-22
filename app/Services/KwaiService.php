@@ -10,6 +10,7 @@ class KwaiService
 {
     private ?string $pixelId;
     private ?string $accessToken;
+    private ?string $testToken;
     private ?string $mmpcode;
     private ?string $pixelSdkVersion;
     private bool $isTest;
@@ -19,6 +20,7 @@ class KwaiService
         // Busca configurações do banco de dados
         $this->pixelId = (string) (SystemSetting::get('kwai_pixel_id', '') ?? '');
         $this->accessToken = (string) (SystemSetting::get('kwai_access_token', '') ?? '');
+        $this->testToken = (string) (SystemSetting::get('kwai_test_token', '') ?? '');
         $this->mmpcode = (string) (SystemSetting::get('kwai_mmpcode', 'PL') ?? 'PL');
         $this->pixelSdkVersion = (string) (SystemSetting::get('kwai_pixel_sdk_version', '9.9.9') ?? '9.9.9');
         $this->isTest = (bool) (SystemSetting::get('kwai_is_test', true) ?? true);
@@ -26,6 +28,7 @@ class KwaiService
         // Remove espaços em branco
         $this->pixelId = trim($this->pixelId);
         $this->accessToken = trim($this->accessToken);
+        $this->testToken = trim($this->testToken);
     }
 
     /**
@@ -52,14 +55,37 @@ class KwaiService
             ];
         }
 
+        // Lógica de click_id:
+        // 1. Prioridade: usa o clickId passado como parâmetro (vem do banco: $user->kwai_click_id)
+        // 2. Fallback (apenas em modo teste): se não tiver clickId, usa testToken
+        // 3. Em produção (modo teste desligado): sempre precisa do click_id real da URL
+        if (empty($clickId) && $this->isTest && !empty($this->testToken)) {
+            $clickId = $this->testToken;
+            Log::info('Kwai usando testToken como click_id (modo teste - fallback)', [
+                'event_name' => $eventName,
+                'test_token' => $this->testToken,
+            ]);
+        }
+        
         // Valida clickId
         if (empty($clickId)) {
+            $errorMsg = 'click_id é obrigatório.';
+            
+            if ($this->isTest) {
+                $errorMsg .= ' Configure kwai_test_token no painel admin para testes.';
+            } else {
+                $errorMsg .= ' O click_id deve ser capturado da URL (?kwai_click_id=...) e salvo no banco.';
+            }
+            
             Log::warning('Kwai click_id vazio', [
                 'event_name' => $eventName,
+                'is_test' => $this->isTest,
+                'has_test_token' => !empty($this->testToken),
             ]);
+            
             return [
                 'success' => false,
-                'error' => 'click_id é obrigatório',
+                'error' => $errorMsg,
             ];
         }
 
@@ -69,26 +95,26 @@ class KwaiService
 
             // Monta payload conforme código do cliente
             $payload = [
-                'access_token' => $this->accessToken,
-                'clickid' => $clickId,
-                'event_name' => $eventName,
-                'pixelId' => $this->pixelId,
-                'is_attributed' => 1,
-                'mmpcode' => $this->mmpcode,
-                'pixelSdkVersion' => $this->pixelSdkVersion,
-                'testFlag' => false,
-                'trackFlag' => $this->isTest, // true = eventos aparecem em "Test Events"
+                'access_token' => (string) $this->accessToken,
+                'clickid' => (string) $clickId,
+                'event_name' => (string) $eventName,
+                'pixelId' => (string) $this->pixelId,
+                'is_attributed' => 1, // Número, não string
+                'mmpcode' => (string) $this->mmpcode,
+                'pixelSdkVersion' => (string) $this->pixelSdkVersion,
+                'testFlag' => false, // Boolean, não string
+                'trackFlag' => $this->isTest ? 1 : 0, // Número: 1 = eventos aparecem em "Test Events"
             ];
 
             // Adiciona currency e value se fornecidos
             if ($value !== null && $currency !== null) {
                 $payload['currency'] = (string) $currency;
-                $payload['value'] = (string) $value;
+                $payload['value'] = (string) number_format($value, 2, '.', '');
             }
 
             // Adiciona properties se fornecido
             if (!empty($properties)) {
-                $payload['properties'] = json_encode($properties);
+                $payload['properties'] = json_encode($properties, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             }
 
             Log::info('Kwai Event API Request', [
@@ -96,9 +122,11 @@ class KwaiService
                 'click_id' => $clickId,
                 'pixel_id' => $this->pixelId,
                 'value' => $value,
+                'payload' => $payload,
             ]);
 
             // Envia para API do AdsNebula
+            // Conforme documentação JavaScript, envia como JSON
             $response = Http::timeout(15)
                 ->withHeaders([
                     'Content-Type' => 'application/json',
@@ -126,18 +154,25 @@ class KwaiService
                     'response' => $responseData,
                 ];
             } else {
+                $errorMsg = $responseData['error_msg'] ?? $responseData['error'] ?? 'Erro desconhecido';
+                
                 Log::error('Kwai Event API Error', [
                     'event_name' => $eventName,
                     'click_id' => $clickId,
                     'http_code' => $response->status(),
+                    'result_code' => $responseData['result'] ?? null,
+                    'error_msg' => $errorMsg,
                     'response' => $responseData,
                     'response_body' => $response->body(),
+                    'payload_sent' => $payload,
+                    'form_data_sent' => $formData ?? null,
                 ]);
 
                 return [
                     'success' => false,
                     'http_code' => $response->status(),
-                    'error' => 'Erro HTTP: ' . $response->status(),
+                    'error' => $errorMsg,
+                    'result_code' => $responseData['result'] ?? null,
                     'response' => $responseData,
                 ];
             }
