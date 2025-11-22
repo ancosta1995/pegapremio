@@ -96,13 +96,36 @@ class PaymentController extends Controller
                 ->where('user_id', $user->id)
                 ->firstOrFail();
 
+            // Recarrega do banco para ter o status mais atualizado (pode ter sido atualizado pelo webhook)
+            $transaction->refresh();
+            
+            // Se a transação já está aprovada no banco, retorna direto (não precisa consultar gateway)
+            if ($transaction->status === 'approved') {
+                return response()->json([
+                    'success' => true,
+                    'transaction' => [
+                        'id' => $transaction->id,
+                        'status' => $transaction->status,
+                        'amount' => $transaction->amount,
+                        'payment_method' => $transaction->payment_method,
+                        'payment_url' => $transaction->payment_url,
+                        'qr_code' => $transaction->qr_code,
+                        'qr_code_text' => $transaction->qr_code_text,
+                    ],
+                ]);
+            }
+
+            // Se ainda está pendente, consulta o gateway para verificar se mudou
             $status = $this->paymentService->getTransactionStatus($transaction);
+
+            // Recarrega novamente após possível atualização
+            $transaction->refresh();
 
             return response()->json([
                 'success' => true,
                 'transaction' => [
                     'id' => $transaction->id,
-                    'status' => $transaction->fresh()->status,
+                    'status' => $transaction->status,
                     'amount' => $transaction->amount,
                     'payment_method' => $transaction->payment_method,
                     'payment_url' => $transaction->payment_url,

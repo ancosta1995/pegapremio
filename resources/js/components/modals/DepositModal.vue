@@ -210,10 +210,18 @@ export default {
                 clearInterval(statusCheckInterval.value);
             }
             
+            console.log('Iniciando verificação de status da transação:', transactionId.value);
+            
             statusCheckInterval.value = setInterval(async () => {
-                if (!transactionId.value) return;
+                if (!transactionId.value) {
+                    console.warn('Transaction ID não encontrado, parando verificação');
+                    clearInterval(statusCheckInterval.value);
+                    statusCheckInterval.value = null;
+                    return;
+                }
                 
                 try {
+                    console.log('Verificando status da transação:', transactionId.value);
                     const response = await fetch(`/api/payments/transaction/${transactionId.value}`, {
                         headers: {
                             'X-CSRF-TOKEN': getCsrfToken(),
@@ -223,23 +231,31 @@ export default {
                     if (response.ok) {
                         const data = await response.json();
                         if (data.success && data.transaction) {
+                            console.log('Status da transação:', data.transaction.status);
+                            
                             // Se foi aprovado, atualiza saldo e fecha modal
                             if (data.transaction.status === 'approved') {
                                 clearInterval(statusCheckInterval.value);
                                 statusCheckInterval.value = null;
                                 
+                                // Mostra toast de sucesso
                                 if (window.showSuccessToast) {
                                     window.showSuccessToast('Pagamento aprovado! Saldo atualizado.');
                                 } else if (window.Notiflix) {
                                     window.Notiflix.Notify.success('✅ Pagamento aprovado! Saldo atualizado.');
                                 }
                                 
-                                // Recarrega dados do usuário para atualizar saldo
-                                if (window.location.reload) {
-                                    setTimeout(() => {
-                                        window.location.reload();
-                                    }, 2000);
-                                }
+                                // Fecha o modal imediatamente
+                                setTimeout(() => {
+                                    closeModal();
+                                    
+                                    // Recarrega dados do usuário para atualizar saldo
+                                    if (window.location.reload) {
+                                        setTimeout(() => {
+                                            window.location.reload();
+                                        }, 500);
+                                    }
+                                }, 1000);
                             } else if (data.transaction.status === 'rejected' || data.transaction.status === 'canceled') {
                                 clearInterval(statusCheckInterval.value);
                                 statusCheckInterval.value = null;
@@ -249,8 +265,17 @@ export default {
                                 } else if (window.Notiflix) {
                                     window.Notiflix.Notify.failure('❌ Pagamento rejeitado ou cancelado.');
                                 }
+                                
+                                // Fecha o modal após mostrar o erro
+                                setTimeout(() => {
+                                    closeModal();
+                                }, 2000);
                             }
+                        } else {
+                            console.warn('Resposta do status não tem transaction:', data);
                         }
+                    } else {
+                        console.error('Erro ao verificar status:', response.status, response.statusText);
                     }
                 } catch (error) {
                     console.error('Erro ao verificar status:', error);
