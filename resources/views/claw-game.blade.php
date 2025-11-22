@@ -37,6 +37,9 @@
     
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     
+    <!-- Script para capturar kwai_click_id -->
+    <script src="{{ asset('js/kwai.js') }}"></script>
+    
     <script>
         // Passa os caminhos dos assets para o Vue
         window.ASSETS_BASE_URL = '{{ asset('') }}';

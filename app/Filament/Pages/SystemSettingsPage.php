@@ -47,7 +47,9 @@ class SystemSettingsPage extends Page implements HasForms
             'seedpay_webhook_secret' => SystemSetting::get('seedpay_webhook_secret', ''),
             'kwai_pixel_id' => SystemSetting::get('kwai_pixel_id', ''),
             'kwai_access_token' => SystemSetting::get('kwai_access_token', ''),
-            'kwai_tracking_webhook_url' => SystemSetting::get('kwai_tracking_webhook_url', ''),
+            'kwai_mmpcode' => SystemSetting::get('kwai_mmpcode', 'PL'),
+            'kwai_pixel_sdk_version' => SystemSetting::get('kwai_pixel_sdk_version', '9.9.9'),
+            'kwai_is_test' => SystemSetting::get('kwai_is_test', true),
         ]);
     }
 
@@ -134,23 +136,34 @@ class SystemSettingsPage extends Page implements HasForms
                             ->maxLength(255)
                             ->helperText('Secret usado para validar webhooks do Seedpay'),
                     ]),
-                Components\Section::make('Tracking (Kwai)')
-                    ->description('Configurações de tracking para eventos do Kwai Ads.')
+                Components\Section::make('Tracking (Kwai Event API)')
+                    ->description('Configurações de tracking para eventos do Kwai Event API (AdsNebula).')
                     ->schema([
                         Forms\Components\TextInput::make('kwai_pixel_id')
                             ->label('Pixel ID')
                             ->maxLength(255)
+                            ->required()
                             ->helperText('ID do pixel do Kwai'),
                         Forms\Components\TextInput::make('kwai_access_token')
                             ->label('Access Token')
                             ->password()
                             ->maxLength(255)
+                            ->required()
                             ->helperText('Token de acesso do Kwai'),
-                        Forms\Components\TextInput::make('kwai_tracking_webhook_url')
-                            ->label('Webhook URL (Kalitrack)')
-                            ->url()
-                            ->maxLength(255)
-                            ->helperText('URL do webhook para enviar eventos de tracking (opcional)'),
+                        Forms\Components\TextInput::make('kwai_mmpcode')
+                            ->label('MMP Code')
+                            ->default('PL')
+                            ->maxLength(10)
+                            ->helperText('Código MMP (padrão: PL)'),
+                        Forms\Components\TextInput::make('kwai_pixel_sdk_version')
+                            ->label('Pixel SDK Version')
+                            ->default('9.9.9')
+                            ->maxLength(20)
+                            ->helperText('Versão do SDK (padrão: 9.9.9)'),
+                        Forms\Components\Toggle::make('kwai_is_test')
+                            ->label('Modo Teste')
+                            ->default(true)
+                            ->helperText('Se ativado, eventos aparecem em "Test Events" (trackFlag: true)'),
                     ]),
             ])
             ->statePath('data');
@@ -174,7 +187,9 @@ class SystemSettingsPage extends Page implements HasForms
         SystemSetting::set('seedpay_webhook_secret', $data['seedpay_webhook_secret'], 'string');
         SystemSetting::set('kwai_pixel_id', $data['kwai_pixel_id'], 'string');
         SystemSetting::set('kwai_access_token', $data['kwai_access_token'], 'string');
-        SystemSetting::set('kwai_tracking_webhook_url', $data['kwai_tracking_webhook_url'], 'string');
+        SystemSetting::set('kwai_mmpcode', $data['kwai_mmpcode'], 'string');
+        SystemSetting::set('kwai_pixel_sdk_version', $data['kwai_pixel_sdk_version'], 'string');
+        SystemSetting::set('kwai_is_test', $data['kwai_is_test'], 'boolean');
 
         Notification::make()
             ->title('Configurações salvas com sucesso!')

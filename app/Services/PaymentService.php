@@ -84,37 +84,26 @@ class PaymentService
                 'amount' => $transaction->amount,
             ]);
 
-            // Envia evento ADD_TO_CART quando o QR code é gerado
-            if ($user->click_id && $user->pixel_id) {
+            // Envia evento AddToCart quando o QR code é gerado (PIX gerado)
+            if ($user->kwai_click_id) {
                 try {
-                    $trackingService = new \App\Services\KwaiTrackingService();
-                    
-                    // Envia evento de adicionar ao carrinho (QR code gerado)
-                    $trackingService->sendEvent(
-                        'EVENT_ADD_TO_CART',
-                        $user->click_id,
-                        $amount,
-                        'deposito'
+                    $kwaiService = new \App\Services\KwaiService();
+                    $kwaiService->sendEvent(
+                        clickId: $user->kwai_click_id,
+                        eventName: 'EVENT_ADD_TO_CART',
+                        properties: [
+                            'content_type' => 'product',
+                            'content_id' => 'deposito',
+                            'content_name' => 'Depósito',
+                            'quantity' => 1,
+                            'price' => $amount,
+                            'event_timestamp' => time() * 1000,
+                        ],
+                        value: $amount,
+                        currency: 'BRL'
                     );
-                    
-                    // Envia para webhook se configurado
-                    $trackingService->sendWebhookEvent([
-                        'evento' => 'add_to_cart',
-                        'user_id' => $user->id,
-                        'valor' => $amount,
-                        'transaction_id' => $transaction->gateway_transaction_id ?? $transaction->id,
-                        'click_id' => $user->click_id,
-                        'pixel_id' => $user->pixel_id,
-                        'campaign_id' => $user->campaign_id,
-                        'adset_id' => $user->adset_id,
-                        'creative_id' => $user->creative_id,
-                        'utm_source' => $user->utm_source,
-                        'utm_campaign' => $user->utm_campaign,
-                        'utm_medium' => $user->utm_medium,
-                        'fbclid' => $user->fbclid,
-                    ]);
                 } catch (\Exception $e) {
-                    Log::error('Erro ao enviar evento ADD_TO_CART no pagamento', [
+                    Log::error('Erro ao enviar evento AddToCart para Kwai', [
                         'transaction_id' => $transaction->id,
                         'user_id' => $user->id,
                         'error' => $e->getMessage(),
@@ -308,37 +297,24 @@ class PaymentService
             }
         }
 
-        // Envia evento de purchase para tracking
-        if ($user->click_id && $user->pixel_id) {
+        // Envia evento Purchase quando o pagamento é aprovado (PIX pago)
+        if ($user->kwai_click_id) {
             try {
-                $trackingService = new \App\Services\KwaiTrackingService();
-                
-                // Envia evento de purchase para o Kwai
-                $trackingService->sendEvent(
-                    'EVENT_PURCHASE',
-                    $user->click_id,
-                    $transaction->amount,
-                    'deposito'
+                $kwaiService = new \App\Services\KwaiService();
+                $kwaiService->sendEvent(
+                    clickId: $user->kwai_click_id,
+                    eventName: 'EVENT_PURCHASE',
+                    properties: [
+                        'content_type' => 'product',
+                        'content_id' => (string) ($transaction->gateway_transaction_id ?? $transaction->id),
+                        'content_name' => 'Depósito - Compra Finalizada',
+                        'event_timestamp' => time() * 1000,
+                    ],
+                    value: $transaction->amount,
+                    currency: 'BRL'
                 );
-                
-                // Envia para webhook se configurado
-                $trackingService->sendWebhookEvent([
-                    'evento' => 'purchase',
-                    'user_id' => $user->id,
-                    'valor' => $transaction->amount,
-                    'transaction_id' => $transaction->gateway_transaction_id ?? $transaction->id,
-                    'click_id' => $user->click_id,
-                    'pixel_id' => $user->pixel_id,
-                    'campaign_id' => $user->campaign_id,
-                    'adset_id' => $user->adset_id,
-                    'creative_id' => $user->creative_id,
-                    'utm_source' => $user->utm_source,
-                    'utm_campaign' => $user->utm_campaign,
-                    'utm_medium' => $user->utm_medium,
-                    'fbclid' => $user->fbclid,
-                ]);
             } catch (\Exception $e) {
-                Log::error('Erro ao enviar evento de tracking no pagamento', [
+                Log::error('Erro ao enviar evento Purchase para Kwai', [
                     'transaction_id' => $transaction->id,
                     'user_id' => $user->id,
                     'error' => $e->getMessage(),

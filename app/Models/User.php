@@ -37,6 +37,7 @@ class User extends Authenticatable
         // Tracking fields
         'click_id',
         'pixel_id',
+        'kwai_click_id',
         'campaign_id',
         'adset_id',
         'creative_id',

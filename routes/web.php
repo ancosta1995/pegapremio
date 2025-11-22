@@ -40,6 +40,35 @@ Route::get('/api/csrf-token', function () {
     ]);
 });
 
+// Rota para capturar kwai_click_id
+Route::post('/kwai/click', function (Request $request) {
+    try {
+        $request->validate([
+            'kwai_click_id' => 'required|string|max:255',
+        ]);
+
+        // Salva na sessão
+        session(['kwai_click_id' => $request->kwai_click_id]);
+
+        Log::info('Kwai click_id capturado', [
+            'kwai_click_id' => $request->kwai_click_id,
+        ]);
+
+        return response()->json([
+            'status' => 'ok',
+        ]);
+    } catch (\Exception $e) {
+        Log::error('Erro ao salvar kwai_click_id', [
+            'error' => $e->getMessage(),
+        ]);
+
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Erro ao salvar click ID',
+        ], 500);
+    }
+});
+
 // Rotas de autenticação via API
 Route::post('/login', function (Request $request) {
     try {
@@ -102,6 +131,7 @@ Route::post('/register', function (Request $request) {
         // Tracking fields
         'click_id' => 'nullable|string|max:255',
         'pixel_id' => 'nullable|string|max:255',
+        'kwai_click_id' => 'nullable|string|max:255',
         'campaign_id' => 'nullable|string|max:255',
         'adset_id' => 'nullable|string|max:255',
         'creative_id' => 'nullable|string|max:255',
@@ -138,6 +168,9 @@ Route::post('/register', function (Request $request) {
         }
     }
 
+    // Captura kwai_click_id da sessão ou do request
+    $kwaiClickId = $request->kwai_click_id ?? session('kwai_click_id');
+
     $user = User::create([
         'name' => $request->name,
         'email' => $request->email,
@@ -151,6 +184,7 @@ Route::post('/register', function (Request $request) {
         // Tracking fields
         'click_id' => $request->click_id,
         'pixel_id' => $request->pixel_id,
+        'kwai_click_id' => $kwaiClickId,
         'campaign_id' => $request->campaign_id,
         'adset_id' => $request->adset_id,
         'creative_id' => $request->creative_id,
@@ -164,31 +198,23 @@ Route::post('/register', function (Request $request) {
         // referral_code será gerado automaticamente pelo boot do modelo
     ]);
     
-    // Envia evento de registro para tracking
-    if ($user->click_id && $user->pixel_id) {
+    // Envia evento de registro para Kwai Event API
+    if ($user->kwai_click_id) {
         try {
-            $trackingService = new \App\Services\KwaiTrackingService();
-            
-            // Envia evento de registro completo
-            $trackingService->sendEvent('EVENT_COMPLETE_REGISTRATION', $user->click_id);
-            
-            // Envia para webhook se configurado
-            $trackingService->sendWebhookEvent([
-                'evento' => 'registro',
-                'user_id' => $user->id,
-                'click_id' => $user->click_id,
-                'pixel_id' => $user->pixel_id,
-                'utm_source' => $user->utm_source,
-                'utm_campaign' => $user->utm_campaign,
-                'utm_medium' => $user->utm_medium,
-                'campaign_id' => $user->campaign_id,
-                'adset_id' => $user->adset_id,
-                'creative_id' => $user->creative_id,
-                'fbclid' => $user->fbclid,
-            ]);
+            $kwaiService = new \App\Services\KwaiService();
+            $kwaiService->sendEvent(
+                clickId: $user->kwai_click_id,
+                eventName: 'EVENT_COMPLETE_REGISTRATION',
+                properties: [
+                    'content_type' => 'user',
+                    'content_name' => 'Registro de Usuário',
+                    'event_timestamp' => time() * 1000,
+                ]
+            );
         } catch (\Exception $e) {
-            Log::error('Erro ao enviar evento de tracking no registro', [
+            Log::error('Erro ao enviar evento de registro para Kwai', [
                 'user_id' => $user->id,
+                'kwai_click_id' => $user->kwai_click_id,
                 'error' => $e->getMessage(),
             ]);
         }
@@ -327,8 +353,6 @@ Route::middleware('auth')->group(function () {
 // Webhook do Seedpay (não requer autenticação, usa secret)
 Route::post('/api/payments/webhook/seedpay/{secret?}', [PaymentController::class, 'webhookSeedpay']);
 
-// Endpoint de tracking (requer autenticação Bearer)
-Route::post('/api/tracking/events', [\App\Http\Controllers\TrackingController::class, 'receiveEvent']);
 
 // Rota para obter configuração do jogo (fallback se não existir)
 Route::post('/', function (Request $request) {
