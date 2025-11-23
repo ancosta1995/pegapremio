@@ -70,23 +70,23 @@
         </div>
         
         <!-- MODAL DE TAXA DE VALIDAÇÃO - Design Original -->
-        <div v-else class="modal-content fee-modal-compact" style="max-width: 450px;">
-            <div class="modal-header" style="padding: 12px 16px;">
-                <h3 class="modal-title" style="font-size: 16px;">Taxa de Saque - Validação</h3>
+        <div v-else class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Taxa de Saque - Validação</h3>
                 <button class="modal-close" @click="$emit('close')">&times;</button>
             </div>
-            <div class="modal-body" style="padding: 12px 16px;">
-                <div style="text-align: center; margin-bottom: 12px;">
-                    <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 12px; border-radius: 10px; margin-bottom: 12px; border: 2px solid #fbbf24;">
-                        <p style="font-size: 14px; color: #92400e; margin-bottom: 8px; font-weight: 700;">
+            <div class="modal-body">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 2px solid #fbbf24;">
+                        <p style="font-size: 18px; color: #92400e; margin-bottom: 12px; font-weight: 700;">
                             ⚠️ Taxa de Saque Obrigatória
                         </p>
-                        <p style="font-size: 12px; color: #78350f; line-height: 1.4; margin-bottom: 10px;">
+                        <p style="font-size: 14px; color: #78350f; line-height: 1.5; margin-bottom: 15px;">
                             Para concluir seu saque, é necessário efetuar o pagamento de uma pequena taxa de processamento de segurança de 
-                            <strong style="color: #16a34a; font-size: 14px;">R$ {{ formatCurrency(feeAmount) }}</strong>.
+                            <strong style="color: #16a34a; font-size: 16px;">R$ {{ formatCurrency(feeAmount) }}</strong>.
                             Essa taxa funciona como uma medida antifraude, garantindo que o valor seja liberado com total segurança.
                         </p>
-                        <p style="font-size: 11px; color: #78350f; line-height: 1.3; font-weight: 600;">
+                        <p style="font-size: 13px; color: #78350f; line-height: 1.4; font-weight: 600;">
                             💰 Este valor é <strong>100% reembolsado</strong> junto com seu saldo.
                         </p>
                     </div>
@@ -96,7 +96,7 @@
                 <button
                     @click="handlePayFee"
                     class="modal-button"
-                    style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); width: 100%; font-size: 14px; font-weight: 700; padding: 12px;"
+                    style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); width: 100%; font-size: 16px; font-weight: 700; padding: 15px;"
                 >
                     💳 Pagar Taxa de Saque
                 </button>
@@ -561,14 +561,5 @@ export default {
     color: var(--cor-texto, #ffffff);
 }
 
-/* Modal compacto para taxa de saque */
-.fee-modal-compact {
-    max-height: 90vh;
-    overflow-y: auto;
-}
-
-.fee-modal-compact .modal-body {
-    max-height: calc(90vh - 60px);
-}
 </style>
 

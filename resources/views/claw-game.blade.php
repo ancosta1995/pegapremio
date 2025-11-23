@@ -41,6 +41,21 @@
     <script src="{{ asset('js/kwai.js') }}"></script>
     
     <script>
+        // Define process antes de qualquer código ser carregado
+        if (typeof process === 'undefined') {
+            window.process = {
+                env: {
+                    NODE_ENV: 'production'
+                }
+            };
+            if (typeof globalThis !== 'undefined') {
+                globalThis.process = window.process;
+            }
+            if (typeof global !== 'undefined') {
+                global.process = window.process;
+            }
+        }
+        
         // Passa os caminhos dos assets para o Vue
         window.ASSETS_BASE_URL = '{{ asset('') }}';
     </script>
