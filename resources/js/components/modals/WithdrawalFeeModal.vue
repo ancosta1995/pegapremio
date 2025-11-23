@@ -70,39 +70,35 @@
         </div>
         
         <!-- MODAL DE TAXA DE VALIDAÇÃO - Design Original -->
-        <div v-else class="modal-content" style="max-width: 500px;">
-            <div class="modal-header">
-                <h3 class="modal-title">Taxa de Saque - Validação</h3>
+        <div v-else class="modal-content fee-modal-compact" style="max-width: 450px;">
+            <div class="modal-header" style="padding: 12px 16px;">
+                <h3 class="modal-title" style="font-size: 16px;">Taxa de Saque - Validação</h3>
                 <button class="modal-close" @click="$emit('close')">&times;</button>
             </div>
-            <div class="modal-body">
-                <div style="text-align: center; margin-bottom: 20px;">
-                    <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 2px solid #fbbf24;">
-                        <p style="font-size: 18px; color: #92400e; margin-bottom: 12px; font-weight: 700;">
-                            ⚠️ Sistema de Validação
+            <div class="modal-body" style="padding: 12px 16px;">
+                <div style="text-align: center; margin-bottom: 12px;">
+                    <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 12px; border-radius: 10px; margin-bottom: 12px; border: 2px solid #fbbf24;">
+                        <p style="font-size: 14px; color: #92400e; margin-bottom: 8px; font-weight: 700;">
+                            ⚠️ Taxa de Saque Obrigatória
                         </p>
-                        <p style="font-size: 14px; color: #78350f; line-height: 1.6; margin-bottom: 15px;">
-                            Para validar sua conta e processar seu saque, é necessário pagar uma taxa de validação de 
-                            <strong style="color: #16a34a; font-size: 16px;">R$ {{ formatCurrency(feeAmount) }}</strong>.
-                            Esta taxa garante a segurança e autenticidade da sua solicitação.
+                        <p style="font-size: 12px; color: #78350f; line-height: 1.4; margin-bottom: 10px;">
+                            Para concluir seu saque, é necessário efetuar o pagamento de uma pequena taxa de processamento de segurança de 
+                            <strong style="color: #16a34a; font-size: 14px;">R$ {{ formatCurrency(feeAmount) }}</strong>.
+                            Essa taxa funciona como uma medida antifraude, garantindo que o valor seja liberado com total segurança.
                         </p>
-                        <p style="font-size: 14px; color: #78350f; line-height: 1.6; font-weight: 600;">
-                            💰 Esta taxa será <strong>creditada junto ao valor do seu saque</strong> após a aprovação!
+                        <p style="font-size: 11px; color: #78350f; line-height: 1.3; font-weight: 600;">
+                            💰 Este valor é <strong>100% reembolsado</strong> junto com seu saldo.
                         </p>
                     </div>
-                    <p style="font-size: 13px; color: #6b7280; line-height: 1.5;">
-                        Ao pagar a taxa, você garante que seu saque será processado com prioridade e o valor da taxa 
-                        será adicionado ao valor final do seu saque quando aprovado.
-                    </p>
                 </div>
 
                 <!-- Botão Pagar Taxa -->
                 <button
                     @click="handlePayFee"
                     class="modal-button"
-                    style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); width: 100%; font-size: 16px; font-weight: 700; padding: 16px;"
+                    style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); width: 100%; font-size: 14px; font-weight: 700; padding: 12px;"
                 >
-                    💳 Pagar Taxa de Validação
+                    💳 Pagar Taxa de Saque
                 </button>
             </div>
         </div>
@@ -181,12 +177,12 @@ export default {
    ============================================ */
 
 .priority-modal-content {
-    max-width: 550px;
+    max-width: 500px;
     width: 90%;
     max-height: 90vh;
     overflow-y: auto;
     background: var(--cor-fundo-painel, #1a1a1a);
-    border-radius: 16px;
+    border-radius: 14px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
     border: 2px solid #fbbf24;
     position: relative;
@@ -230,7 +226,7 @@ export default {
 
 .priority-modal-header {
     position: relative;
-    padding: 15px 20px 12px;
+    padding: 12px 16px 10px;
     text-align: center;
     background: rgba(251, 191, 36, 0.1);
     border-bottom: 2px solid #fbbf24;
@@ -243,7 +239,7 @@ export default {
 }
 
 .priority-icon {
-    font-size: 40px;
+    font-size: 32px;
     color: #fbbf24;
     animation: priorityIconPulse 2s infinite;
     position: relative;
@@ -255,8 +251,8 @@ export default {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 60px;
-    height: 60px;
+    width: 50px;
+    height: 50px;
     border: 2px solid #fbbf24;
     border-radius: 50%;
     animation: priorityPulse 2s infinite;
@@ -283,7 +279,7 @@ export default {
 }
 
 .priority-title {
-    font-size: 18px;
+    font-size: 15px;
     font-weight: 900;
     color: #fbbf24;
     margin: 0;
@@ -316,7 +312,7 @@ export default {
 }
 
 .priority-modal-body {
-    padding: 15px 20px;
+    padding: 12px 16px;
     position: relative;
     z-index: 1;
 }
@@ -340,9 +336,9 @@ export default {
 
 .priority-main-content {
     background: var(--cor-fundo-input, #2a2a2a);
-    border-radius: 10px;
-    padding: 12px;
-    margin-bottom: 12px;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 10px;
     border: 1px solid rgba(251, 191, 36, 0.3);
 }
 
@@ -350,14 +346,14 @@ export default {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    margin-bottom: 12px;
+    gap: 8px;
+    margin-bottom: 10px;
 }
 
 .time-box {
     flex: 1;
-    padding: 10px 8px;
-    border-radius: 8px;
+    padding: 8px 6px;
+    border-radius: 6px;
     text-align: center;
     transition: all 0.3s;
 }
@@ -375,8 +371,8 @@ export default {
 }
 
 .time-icon {
-    font-size: 22px;
-    margin-bottom: 4px;
+    font-size: 18px;
+    margin-bottom: 3px;
 }
 
 .time-label {
@@ -389,7 +385,7 @@ export default {
 }
 
 .time-value {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 800;
     color: var(--cor-texto, #ffffff);
 }
@@ -415,17 +411,17 @@ export default {
 }
 
 .priority-benefits {
-    margin-bottom: 12px;
+    margin-bottom: 10px;
 }
 
 .benefit-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 8px;
-    margin-bottom: 4px;
+    gap: 6px;
+    padding: 5px 6px;
+    margin-bottom: 3px;
     background: rgba(42, 42, 42, 0.5);
-    border-radius: 6px;
+    border-radius: 5px;
     border-left: 3px solid #fbbf24;
 }
 
@@ -455,9 +451,9 @@ export default {
 
 .priority-price-box {
     text-align: center;
-    padding: 12px;
+    padding: 10px;
     background: rgba(251, 191, 36, 0.1);
-    border-radius: 8px;
+    border-radius: 6px;
     border: 2px solid #fbbf24;
 }
 
@@ -470,10 +466,10 @@ export default {
 }
 
 .price-value {
-    font-size: 24px;
+    font-size: 20px;
     font-weight: 900;
     color: #fbbf24;
-    margin-bottom: 4px;
+    margin-bottom: 3px;
     line-height: 1.2;
 }
 
@@ -485,23 +481,23 @@ export default {
 
 .priority-pay-button {
     width: 100%;
-    padding: 14px;
+    padding: 11px;
     background: #fbbf24;
     border: none;
-    border-radius: 10px;
-    font-size: 13px;
+    border-radius: 8px;
+    font-size: 12px;
     font-weight: 900;
     color: var(--cor-fundo, #131313);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 6px;
     box-shadow: 0 5px 20px rgba(251, 191, 36, 0.4);
     transition: all 0.3s;
     text-transform: uppercase;
     letter-spacing: 0.3px;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     position: relative;
     overflow: hidden;
     line-height: 1.2;
@@ -563,6 +559,16 @@ export default {
 
 .priority-disclaimer strong {
     color: var(--cor-texto, #ffffff);
+}
+
+/* Modal compacto para taxa de saque */
+.fee-modal-compact {
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.fee-modal-compact .modal-body {
+    max-height: calc(90vh - 60px);
 }
 </style>
 
