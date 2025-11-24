@@ -86,6 +86,7 @@ export default {
             referral_code: '',
             // Tracking fields
             click_id: '',
+            kwai_click_id: '',
             pixel_id: '',
             campaign_id: '',
             adset_id: '',
@@ -111,12 +112,19 @@ export default {
                 form.value.referral_code = refCode;
             }
             
-            // Parâmetros de tracking
-            form.value.click_id = urlParams.get('click_id') || urlParams.get('clickid') || '';
-            form.value.pixel_id = urlParams.get('pixel_id') || urlParams.get('pixelid') || '';
-            form.value.campaign_id = urlParams.get('campaign_id') || '';
-            form.value.adset_id = urlParams.get('adset_id') || '';
-            form.value.creative_id = urlParams.get('creative_id') || '';
+            // Parâmetros de tracking (captura tanto do URL quanto do localStorage)
+            // Prioridade: URL > localStorage
+            const clickIdFromUrl = urlParams.get('click_id') || urlParams.get('clickid');
+            const kwaiClickIdFromUrl = urlParams.get('kwai_click_id');
+            const clickIdFromStorage = localStorage.getItem('click_id') || localStorage.getItem('kwai_click_id');
+            
+            // O click_id do link do Kwai deve ser salvo como kwai_click_id
+            form.value.kwai_click_id = kwaiClickIdFromUrl || clickIdFromUrl || clickIdFromStorage || '';
+            form.value.click_id = clickIdFromUrl || clickIdFromStorage || '';
+            form.value.pixel_id = urlParams.get('pixel_id') || urlParams.get('pixelid') || urlParams.get('kwaiId') || urlParams.get('kwai_id') || localStorage.getItem('pixel_id') || '';
+            form.value.campaign_id = urlParams.get('CampaignID') || urlParams.get('campaign_id') || urlParams.get('CampaignId') || localStorage.getItem('campaign_id') || '';
+            form.value.adset_id = urlParams.get('adSETID') || urlParams.get('adset_id') || urlParams.get('AdsetId') || localStorage.getItem('adset_id') || '';
+            form.value.creative_id = urlParams.get('CreativeID') || urlParams.get('creative_id') || urlParams.get('CreativeId') || localStorage.getItem('creative_id') || '';
             form.value.utm_source = urlParams.get('utm_source') || '';
             form.value.utm_campaign = urlParams.get('utm_campaign') || '';
             form.value.utm_medium = urlParams.get('utm_medium') || '';

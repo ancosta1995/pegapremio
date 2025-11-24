@@ -85,30 +85,38 @@ class PaymentService
             ]);
 
             // Envia evento AddToCart quando o QR code é gerado (PIX gerado)
-            if ($user->kwai_click_id) {
-                try {
-                    $kwaiService = new \App\Services\KwaiService();
-                    $kwaiService->sendEvent(
-                        clickId: $user->kwai_click_id,
-                        eventName: 'EVENT_ADD_TO_CART',
-                        properties: [
-                            'content_type' => 'product',
-                            'content_id' => 'deposito',
-                            'content_name' => 'Depósito',
-                            'quantity' => 1,
-                            'price' => $amount,
-                            'event_timestamp' => time() * 1000,
-                        ],
-                        value: $amount,
-                        currency: 'BRL'
-                    );
-                } catch (\Exception $e) {
-                    Log::error('Erro ao enviar evento AddToCart para Kwai', [
+            // Em modo teste, usa testToken como fallback se não tiver kwai_click_id
+            try {
+                $kwaiService = new \App\Services\KwaiService();
+                $result = $kwaiService->sendEvent(
+                    clickId: $user->kwai_click_id ?? '',
+                    eventName: 'EVENT_ADD_TO_CART',
+                    properties: [
+                        'content_type' => 'product',
+                        'content_id' => 'deposito',
+                        'content_name' => 'Depósito',
+                        'quantity' => 1,
+                        'price' => $amount,
+                        'event_timestamp' => time() * 1000,
+                    ],
+                    value: $amount,
+                    currency: 'BRL'
+                );
+                
+                if (!$result['success']) {
+                    Log::warning('Kwai AddToCart event failed', [
                         'transaction_id' => $transaction->id,
                         'user_id' => $user->id,
-                        'error' => $e->getMessage(),
+                        'error' => $result['error'] ?? 'Unknown error',
+                        'has_click_id' => !empty($user->kwai_click_id),
                     ]);
                 }
+            } catch (\Exception $e) {
+                Log::error('Erro ao enviar evento AddToCart para Kwai', [
+                    'transaction_id' => $transaction->id,
+                    'user_id' => $user->id,
+                    'error' => $e->getMessage(),
+                ]);
             }
 
             return $transaction->fresh();
@@ -298,28 +306,36 @@ class PaymentService
         }
 
         // Envia evento Purchase quando o pagamento é aprovado (PIX pago)
-        if ($user->kwai_click_id) {
-            try {
-                $kwaiService = new \App\Services\KwaiService();
-                $kwaiService->sendEvent(
-                    clickId: $user->kwai_click_id,
-                    eventName: 'EVENT_PURCHASE',
-                    properties: [
-                        'content_type' => 'product',
-                        'content_id' => (string) ($transaction->gateway_transaction_id ?? $transaction->id),
-                        'content_name' => 'Depósito - Compra Finalizada',
-                        'event_timestamp' => time() * 1000,
-                    ],
-                    value: $transaction->amount,
-                    currency: 'BRL'
-                );
-            } catch (\Exception $e) {
-                Log::error('Erro ao enviar evento Purchase para Kwai', [
+        // Em modo teste, usa testToken como fallback se não tiver kwai_click_id
+        try {
+            $kwaiService = new \App\Services\KwaiService();
+            $result = $kwaiService->sendEvent(
+                clickId: $user->kwai_click_id ?? '',
+                eventName: 'EVENT_PURCHASE',
+                properties: [
+                    'content_type' => 'product',
+                    'content_id' => (string) ($transaction->gateway_transaction_id ?? $transaction->id),
+                    'content_name' => 'Depósito - Compra Finalizada',
+                    'event_timestamp' => time() * 1000,
+                ],
+                value: $transaction->amount,
+                currency: 'BRL'
+            );
+            
+            if (!$result['success']) {
+                Log::warning('Kwai Purchase event failed', [
                     'transaction_id' => $transaction->id,
                     'user_id' => $user->id,
-                    'error' => $e->getMessage(),
+                    'error' => $result['error'] ?? 'Unknown error',
+                    'has_click_id' => !empty($user->kwai_click_id),
                 ]);
             }
+        } catch (\Exception $e) {
+            Log::error('Erro ao enviar evento Purchase para Kwai', [
+                'transaction_id' => $transaction->id,
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
         }
 
         // Log da operação

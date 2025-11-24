@@ -14,14 +14,47 @@
         return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
     }
 
-    // Função para salvar click_id no localStorage
-    function saveClickId() {
+    // Função para salvar todos os parâmetros do Kwai
+    function saveKwaiParams() {
+        // Captura click_id (pode vir como click_id ou kwai_click_id)
         const clickId = getUrlParameter('click_id') || getUrlParameter('kwai_click_id');
+        
+        // Captura outros parâmetros do Kwai (com diferentes nomes na URL)
+        const kwaiId = getUrlParameter('kwaiId') || getUrlParameter('kwai_id');
+        const pixelId = getUrlParameter('pixel_id') || kwaiId;
+        const campaignId = getUrlParameter('CampaignID') || getUrlParameter('campaign_id') || getUrlParameter('CampaignId');
+        const adsetId = getUrlParameter('adSETID') || getUrlParameter('adset_id') || getUrlParameter('AdsetId');
+        const creativeId = getUrlParameter('CreativeID') || getUrlParameter('creative_id') || getUrlParameter('CreativeId');
+        
+        // Salva no localStorage
         if (clickId) {
             localStorage.setItem('kwai_click_id', clickId);
+            localStorage.setItem('click_id', clickId); // Também salva como click_id para compatibilidade
             console.log('Kwai click_id saved:', clickId);
+        }
+        
+        if (pixelId) {
+            localStorage.setItem('pixel_id', pixelId);
+            console.log('Kwai pixel_id saved:', pixelId);
+        }
+        
+        if (campaignId) {
+            localStorage.setItem('campaign_id', campaignId);
+            console.log('Kwai campaign_id saved:', campaignId);
+        }
+        
+        if (adsetId) {
+            localStorage.setItem('adset_id', adsetId);
+            console.log('Kwai adset_id saved:', adsetId);
+        }
+        
+        if (creativeId) {
+            localStorage.setItem('creative_id', creativeId);
+            console.log('Kwai creative_id saved:', creativeId);
+        }
 
-            // Envia para backend imediatamente
+        // Envia para backend imediatamente (sessão)
+        if (clickId) {
             const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
             
             if (csrfToken) {
@@ -31,9 +64,15 @@
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': csrfToken
                     },
-                    body: JSON.stringify({ kwai_click_id: clickId })
+                    body: JSON.stringify({ 
+                        kwai_click_id: clickId,
+                        pixel_id: pixelId || null,
+                        campaign_id: campaignId || null,
+                        adset_id: adsetId || null,
+                        creative_id: creativeId || null
+                    })
                 }).catch(err => {
-                    console.error('Erro ao enviar click_id:', err);
+                    console.error('Erro ao enviar parâmetros do Kwai:', err);
                 });
             }
         }
@@ -48,11 +87,6 @@
     function trackContentView(page = null) {
         const clickId = getClickId();
         
-        if (!clickId) {
-            console.log('Kwai: click_id não encontrado, evento Content View não será enviado');
-            return;
-        }
-
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
         
         if (!csrfToken) {
@@ -77,6 +111,7 @@
         }
 
         // Envia para o backend processar
+        // O backend vai usar testToken como fallback se click_id estiver vazio e estiver em modo teste
         fetch('/api/kwai/track-content-view', {
             method: 'POST',
             headers: {
@@ -85,7 +120,7 @@
                 'Accept': 'application/json'
             },
             body: JSON.stringify({
-                click_id: clickId,
+                click_id: clickId || null, // Envia null se não tiver, backend vai usar testToken em modo teste
                 page: page
             })
         }).catch(err => {
@@ -95,11 +130,11 @@
 
     // Inicialização
     function init() {
-        // Sempre salvar click_id se presente na URL
-        saveClickId();
+        // Sempre salvar todos os parâmetros do Kwai se presentes na URL
+        saveKwaiParams();
         
         // Envia evento de visualização de conteúdo quando a página carregar
-        // Aguarda um pouco para garantir que o click_id foi salvo
+        // Aguarda um pouco para garantir que os parâmetros foram salvos
         setTimeout(() => {
             trackContentView();
         }, 500);

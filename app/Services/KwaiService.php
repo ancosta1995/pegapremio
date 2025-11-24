@@ -21,8 +21,9 @@ class KwaiService
         $this->pixelId = (string) (SystemSetting::get('kwai_pixel_id', '') ?? '');
         $this->accessToken = (string) (SystemSetting::get('kwai_access_token', '') ?? '');
         $this->testToken = (string) (SystemSetting::get('kwai_test_token', '') ?? '');
-        $this->mmpcode = (string) (SystemSetting::get('kwai_mmpcode', 'PL') ?? 'PL');
-        $this->pixelSdkVersion = (string) (SystemSetting::get('kwai_pixel_sdk_version', '9.9.9') ?? '9.9.9');
+        // Valores hardcoded conforme especificação do Kwai
+        $this->mmpcode = 'PL';
+        $this->pixelSdkVersion = '9.9.9';
         $this->isTest = (bool) (SystemSetting::get('kwai_is_test', true) ?? true);
         
         // Remove espaços em branco
@@ -105,6 +106,7 @@ class KwaiService
                 'pixelSdkVersion' => (string) $this->pixelSdkVersion,
                 'testFlag' => false, // Sempre false (boolean)
                 'trackFlag' => $this->isTest, // Boolean: true = eventos aparecem em "Test Events"
+                'third_party' => 'tracking_pegapremio', // Identificador do sistema
             ];
 
             // Adiciona currency e value se fornecidos

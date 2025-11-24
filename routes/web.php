@@ -49,31 +49,45 @@ Route::get('/api/min-deposit', function () {
     ]);
 });
 
-// Rota para capturar kwai_click_id
+// Rota para capturar parâmetros do Kwai
 Route::post('/kwai/click', function (Request $request) {
     try {
         $request->validate([
             'kwai_click_id' => 'required|string|max:255',
+            'pixel_id' => 'nullable|string|max:255',
+            'campaign_id' => 'nullable|string|max:255',
+            'adset_id' => 'nullable|string|max:255',
+            'creative_id' => 'nullable|string|max:255',
         ]);
 
-        // Salva na sessão
-        session(['kwai_click_id' => $request->kwai_click_id]);
-
-        Log::info('Kwai click_id capturado', [
+        // Salva todos os parâmetros na sessão
+        session([
             'kwai_click_id' => $request->kwai_click_id,
+            'pixel_id' => $request->pixel_id,
+            'campaign_id' => $request->campaign_id,
+            'adset_id' => $request->adset_id,
+            'creative_id' => $request->creative_id,
+        ]);
+
+        Log::info('Kwai parâmetros capturados', [
+            'kwai_click_id' => $request->kwai_click_id,
+            'pixel_id' => $request->pixel_id,
+            'campaign_id' => $request->campaign_id,
+            'adset_id' => $request->adset_id,
+            'creative_id' => $request->creative_id,
         ]);
 
         return response()->json([
             'status' => 'ok',
         ]);
     } catch (\Exception $e) {
-        Log::error('Erro ao salvar kwai_click_id', [
+        Log::error('Erro ao salvar parâmetros do Kwai', [
             'error' => $e->getMessage(),
         ]);
 
         return response()->json([
             'status' => 'error',
-            'message' => 'Erro ao salvar click ID',
+            'message' => 'Erro ao salvar parâmetros',
         ], 500);
     }
 });
@@ -177,8 +191,12 @@ Route::post('/register', function (Request $request) {
         }
     }
 
-    // Captura kwai_click_id da sessão ou do request
+    // Captura todos os parâmetros do Kwai da sessão ou do request
     $kwaiClickId = $request->kwai_click_id ?? session('kwai_click_id');
+    $pixelId = $request->pixel_id ?? session('pixel_id');
+    $campaignId = $request->campaign_id ?? session('campaign_id');
+    $adsetId = $request->adset_id ?? session('adset_id');
+    $creativeId = $request->creative_id ?? session('creative_id');
 
     $user = User::create([
         'name' => $request->name,
@@ -190,13 +208,13 @@ Route::post('/register', function (Request $request) {
         'balance_ref' => 0,
         'cpa' => $defaultCpa,
         'referred_by' => $referredBy,
-        // Tracking fields
+        // Tracking fields (prioriza valores do request, depois sessão)
         'click_id' => $request->click_id,
-        'pixel_id' => $request->pixel_id,
+        'pixel_id' => $request->pixel_id ?? $pixelId,
         'kwai_click_id' => $kwaiClickId,
-        'campaign_id' => $request->campaign_id,
-        'adset_id' => $request->adset_id,
-        'creative_id' => $request->creative_id,
+        'campaign_id' => $request->campaign_id ?? $campaignId,
+        'adset_id' => $request->adset_id ?? $adsetId,
+        'creative_id' => $request->creative_id ?? $creativeId,
         'utm_source' => $request->utm_source,
         'utm_campaign' => $request->utm_campaign,
         'utm_medium' => $request->utm_medium,
@@ -208,25 +226,32 @@ Route::post('/register', function (Request $request) {
     ]);
     
     // Envia evento de registro para Kwai Event API
-    if ($user->kwai_click_id) {
-        try {
-            $kwaiService = new \App\Services\KwaiService();
-            $kwaiService->sendEvent(
-                clickId: $user->kwai_click_id,
-                eventName: 'EVENT_COMPLETE_REGISTRATION',
-                properties: [
-                    'content_type' => 'user',
-                    'content_name' => 'Registro de Usuário',
-                    'event_timestamp' => time() * 1000,
-                ]
-            );
-        } catch (\Exception $e) {
-            Log::error('Erro ao enviar evento de registro para Kwai', [
+    // Em modo teste, usa testToken como fallback se não tiver kwai_click_id
+    try {
+        $kwaiService = new \App\Services\KwaiService();
+        $result = $kwaiService->sendEvent(
+            clickId: $kwaiClickId ?? '',
+            eventName: 'EVENT_COMPLETE_REGISTRATION',
+            properties: [
+                'content_type' => 'user',
+                'content_name' => 'Registro de Usuário',
+                'event_timestamp' => time() * 1000,
+            ]
+        );
+        
+        if (!$result['success']) {
+            Log::warning('Kwai Complete Registration event failed', [
                 'user_id' => $user->id,
-                'kwai_click_id' => $user->kwai_click_id,
-                'error' => $e->getMessage(),
+                'error' => $result['error'] ?? 'Unknown error',
+                'has_click_id' => !empty($kwaiClickId),
             ]);
         }
+    } catch (\Exception $e) {
+        Log::error('Erro ao enviar evento de registro para Kwai', [
+            'user_id' => $user->id,
+            'kwai_click_id' => $kwaiClickId,
+            'error' => $e->getMessage(),
+        ]);
     }
 
         Auth::login($user);
@@ -368,11 +393,12 @@ Route::post('/api/payments/webhook/seedpay/{secret?}', [PaymentController::class
 Route::post('/api/kwai/track-content-view', function (Request $request) {
     try {
         $request->validate([
-            'click_id' => 'required|string|max:255',
+            'click_id' => 'nullable|string|max:255', // Opcional para permitir fallback com testToken
             'page' => 'nullable|string|max:255',
         ]);
 
-        $clickId = $request->click_id;
+        // Em modo teste, usa testToken como fallback se não tiver click_id
+        $clickId = $request->click_id ?? '';
         $page = $request->page ?? 'home';
 
         // Mapeia nomes de páginas para nomes amigáveis
@@ -387,6 +413,7 @@ Route::post('/api/kwai/track-content-view', function (Request $request) {
         $pageName = $pageNames[$page] ?? ucfirst($page);
 
         // Envia evento EVENT_CONTENT_VIEW para Kwai
+        // O KwaiService vai usar testToken como fallback se clickId estiver vazio e estiver em modo teste
         $kwaiService = new \App\Services\KwaiService();
         $result = $kwaiService->sendEvent(
             clickId: $clickId,
