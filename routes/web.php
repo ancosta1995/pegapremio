@@ -574,7 +574,7 @@ Route::post('/', function (Request $request) {
         // Modo demo - não precisa autenticação e não debita saldo
         $request->validate([
             'bet_amount' => 'required|numeric|min:0.01',
-            'collision_type' => 'required|string|in:prize,none',
+            'collision_type' => 'required|string|in:bomb,prize,none',
         ]);
         
         $betAmount = (float) $request->bet_amount;
@@ -584,8 +584,13 @@ Route::post('/', function (Request $request) {
         $winAmount = 0;
         $multiplier = 0;
         
+        // Se colidiu com bomba, sempre perde
+        if ($collisionType === 'bomb') {
+            $isWin = false;
+            $winAmount = 0;
+        }
         // Se colidiu com prêmio, sorteia um multiplicador (modo demo)
-        if ($collisionType === 'prize') {
+        elseif ($collisionType === 'prize') {
             try {
                 $multiplier = GameMultiplier::getRandomMultiplier(true); // true = modo demo
                 $winAmount = $betAmount * $multiplier;
@@ -623,7 +628,7 @@ Route::post('/', function (Request $request) {
         
         $request->validate([
             'bet_amount' => 'required|numeric|min:0.01',
-            'collision_type' => 'required|string|in:prize,none',
+            'collision_type' => 'required|string|in:bomb,prize,none',
         ]);
         
         $user = Auth::user();
@@ -651,8 +656,13 @@ Route::post('/', function (Request $request) {
         $winAmount = 0;
         $multiplier = 0;
         
+        // Se colidiu com bomba, sempre perde
+        if ($collisionType === 'bomb') {
+            $isWin = false;
+            $winAmount = 0;
+        }
         // Se colidiu com prêmio, sorteia um multiplicador baseado no tipo de usuário
-        if ($collisionType === 'prize') {
+        elseif ($collisionType === 'prize') {
             try {
                 $multiplier = GameMultiplier::getRandomMultiplier($user->is_demo ?? false);
                 $winAmount = $betAmount * $multiplier;

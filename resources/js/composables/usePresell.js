@@ -89,8 +89,9 @@ export function usePresell(internalApiRequest, asset) {
             ]
         });
 
-        // Step 3: Explicar caixas de presentes (jogo)
+        // Step 3: Explicar caixas de presentes e bombas (jogo)
         const prizeImageUrl = asset('assets/prize1.png');
+        const bombImageUrl = asset('assets/bomb1.png');
         tour.addStep({
             id: 'game-items',
             text: `
@@ -100,9 +101,14 @@ export function usePresell(internalApiRequest, asset) {
                             <img src="${prizeImageUrl}" alt="Prêmio" style="width: 50px; height: 50px; display: block; margin: 0 auto 5px;">
                             <strong style="color: #22c55e; font-size: 12px;">Prêmio</strong>
                         </div>
+                        <div style="text-align: center;">
+                            <img src="${bombImageUrl}" alt="Bomba" style="width: 50px; height: 50px; display: block; margin: 0 auto 5px;">
+                            <strong style="color: #ef4444; font-size: 12px;">Bomba</strong>
+                        </div>
                     </div>
                     <p style="font-size: 13px; color: #ffffff; line-height: 1.5; margin: 0;">
-                        <strong style="color: #22c55e;">Caixas de Presentes</strong> = Você ganha!
+                        <strong style="color: #22c55e;">Caixas de Presentes</strong> = Você ganha!<br>
+                        <strong style="color: #ef4444;">Bombas</strong> = Você perde
                     </p>
                 </div>
             `,

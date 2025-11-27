@@ -63,8 +63,10 @@ export function useGameLogic(
         const currentPrizeSrc = prizeImages.value[currentBetIndex.value % prizeImages.value.length];
 
         for (let i = 0; i < itemsCount; i++) {
+            // Bombas aparecem visualmente, mas nunca são capturadas (probabilidade de captura = 0%)
+            const isBomb = i % 3 === 0;
             items.value.push({
-                src: currentPrizeSrc,
+                src: isBomb ? asset('assets/bomb1.png') : currentPrizeSrc,
                 x: Math.random() * (gameRect.width - 48),
                 y: (gameRect.height * 0.4) + (Math.random() * (gameRect.height * 0.5 - 48)),
                 vx: (Math.random() - 0.5) * 1.5,
@@ -150,8 +152,20 @@ export function useGameLogic(
                 const gameAreaRect = gameArea.value.getBoundingClientRect();
                 const clawCenterX = clawRect.left + (clawRect.width / 2) - gameAreaRect.left;
                 
+                // No modo presell, mantém a lógica original (pode perder)
+                if (isPresellMode.value) {
+                    for (const item of items.value) {
+                        if (Math.abs(clawCenterX - (item.x + 24)) < 24) {
+                            return item.src.includes('bomb') ? 'bomb' : 'prize';
+                        }
+                    }
+                    return 'none';
+                }
+                
+                // No jogo real: bombas aparecem visualmente, mas sempre captura presente (sempre ganha)
                 for (const item of items.value) {
                     if (Math.abs(clawCenterX - (item.x + 24)) < 24) {
+                        // Qualquer colisão (bomba ou presente) sempre retorna 'prize'
                         return 'prize';
                     }
                 }
