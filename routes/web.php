@@ -397,6 +397,35 @@ Route::post('/api/kwai/track-content-view', function (Request $request) {
             'page' => 'nullable|string|max:255',
         ]);
 
+        // Verifica se o evento já foi enviado para este usuário/sessão
+        $alreadySent = false;
+        
+        // Se estiver autenticado, verifica no banco de dados
+        if (auth()->check()) {
+            $user = auth()->user();
+            if ($user->kwai_content_view_sent) {
+                $alreadySent = true;
+                Log::info('Kwai Content View já foi enviado para este usuário', [
+                    'user_id' => $user->id,
+                ]);
+            }
+        } else {
+            // Se não estiver autenticado, verifica na session
+            if (session('kwai_content_view_sent', false)) {
+                $alreadySent = true;
+                Log::info('Kwai Content View já foi enviado para esta sessão');
+            }
+        }
+
+        // Se já foi enviado, retorna sem enviar novamente
+        if ($alreadySent) {
+            return response()->json([
+                'status' => 'ok',
+                'message' => 'Content View já foi enviado anteriormente',
+                'already_sent' => true,
+            ]);
+        }
+
         // Em modo teste, usa testToken como fallback se não tiver click_id
         $clickId = $request->click_id ?? '';
         $page = $request->page ?? 'home';
@@ -428,8 +457,18 @@ Route::post('/api/kwai/track-content-view', function (Request $request) {
         );
 
         if ($result['success']) {
+            // Marca como enviado no banco de dados (se autenticado) ou na session
+            if (auth()->check()) {
+                $user = auth()->user();
+                $user->kwai_content_view_sent = true;
+                $user->save();
+            } else {
+                session(['kwai_content_view_sent' => true]);
+            }
+
             Log::info('Kwai Content View tracked', [
                 'click_id' => $clickId,
+                'user_id' => auth()->id(),
             ]);
         } else {
             Log::warning('Kwai Content View failed', [

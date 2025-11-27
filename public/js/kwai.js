@@ -85,6 +85,13 @@
 
     // Função para enviar evento EVENT_CONTENT_VIEW para o backend
     function trackContentView(page = null) {
+        // Verifica se o evento já foi enviado (localStorage como cache)
+        const contentViewSent = localStorage.getItem('kwai_content_view_sent');
+        if (contentViewSent === 'true') {
+            console.log('Kwai: Content View já foi enviado anteriormente');
+            return;
+        }
+
         const clickId = getClickId();
         
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
@@ -123,7 +130,19 @@
                 click_id: clickId || null, // Envia null se não tiver, backend vai usar testToken em modo teste
                 page: page
             })
-        }).catch(err => {
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Se foi enviado com sucesso, marca no localStorage para evitar chamadas futuras
+            if (data.status === 'ok' && !data.already_sent) {
+                localStorage.setItem('kwai_content_view_sent', 'true');
+                console.log('Kwai: Content View enviado com sucesso');
+            } else if (data.already_sent) {
+                // Se já foi enviado, marca no localStorage também
+                localStorage.setItem('kwai_content_view_sent', 'true');
+            }
+        })
+        .catch(err => {
             console.error('Kwai: Erro ao enviar Content View:', err);
         });
     }

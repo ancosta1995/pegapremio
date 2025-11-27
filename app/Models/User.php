@@ -48,6 +48,7 @@ class User extends Authenticatable
         'utm_term',
         'utm_id',
         'fbclid',
+        'kwai_content_view_sent',
     ];
 
     /**
@@ -79,6 +80,7 @@ class User extends Authenticatable
             'total_wagered' => 'decimal:2',
             'is_demo' => 'boolean',
             'is_admin' => 'boolean',
+            'kwai_content_view_sent' => 'boolean',
         ];
     }
 
