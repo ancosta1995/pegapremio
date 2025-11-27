@@ -63,9 +63,8 @@ export function useGameLogic(
         const currentPrizeSrc = prizeImages.value[currentBetIndex.value % prizeImages.value.length];
 
         for (let i = 0; i < itemsCount; i++) {
-            const isBomb = i % 3 === 0;
             items.value.push({
-                src: isBomb ? asset('assets/bomb1.png') : currentPrizeSrc,
+                src: currentPrizeSrc,
                 x: Math.random() * (gameRect.width - 48),
                 y: (gameRect.height * 0.4) + (Math.random() * (gameRect.height * 0.5 - 48)),
                 vx: (Math.random() - 0.5) * 1.5,
@@ -153,7 +152,7 @@ export function useGameLogic(
                 
                 for (const item of items.value) {
                     if (Math.abs(clawCenterX - (item.x + 24)) < 24) {
-                        return item.src.includes('bomb') ? 'bomb' : 'prize';
+                        return 'prize';
                     }
                 }
                 return 'none';
@@ -194,7 +193,7 @@ export function useGameLogic(
                         winMultiplier.value = selectedMultiplier;
                         modals.showPresellWinModal.value = true;
                     } else {
-                        // Primeiras rodadas sempre perdem (bomba)
+                        // Primeiras rodadas sempre perdem
                         if (lossSound.value) lossSound.value.play();
                         modals.showLossModal.value = true;
                     }

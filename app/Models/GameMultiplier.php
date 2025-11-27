@@ -18,7 +18,7 @@ class GameMultiplier extends Model
     /**
      * Seleciona um multiplicador aleatório baseado nas probabilidades
      * @param bool $isDemo Se true, retorna multiplicadores para usuários demo
-     */
+    */
     public static function getRandomMultiplier($isDemo = false)
     {
         $multipliers = static::where('active', true)
