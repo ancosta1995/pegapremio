@@ -83,14 +83,26 @@
         return localStorage.getItem('kwai_click_id') || '';
     }
 
+    // Flag para evitar chamadas simultâneas
+    let isSendingContentView = false;
+
     // Função para enviar evento EVENT_CONTENT_VIEW para o backend
     function trackContentView(page = null) {
+        // Verifica se já está enviando (evita chamadas simultâneas)
+        if (isSendingContentView) {
+            console.log('Kwai: Content View já está sendo enviado, aguardando...');
+            return;
+        }
+
         // Verifica se o evento já foi enviado (localStorage como cache)
         const contentViewSent = localStorage.getItem('kwai_content_view_sent');
         if (contentViewSent === 'true') {
             console.log('Kwai: Content View já foi enviado anteriormente');
             return;
         }
+
+        // Marca como enviando para evitar chamadas simultâneas
+        isSendingContentView = true;
 
         const clickId = getClickId();
         
@@ -141,9 +153,13 @@
                 // Se já foi enviado, marca no localStorage também
                 localStorage.setItem('kwai_content_view_sent', 'true');
             }
+            // Libera a flag após processar a resposta
+            isSendingContentView = false;
         })
         .catch(err => {
             console.error('Kwai: Erro ao enviar Content View:', err);
+            // Libera a flag mesmo em caso de erro
+            isSendingContentView = false;
         });
     }
 

@@ -426,6 +426,35 @@ Route::post('/api/kwai/track-content-view', function (Request $request) {
             ]);
         }
 
+        // Marca como enviado ANTES de enviar para evitar race conditions
+        // Se duas requisições chegarem simultaneamente, apenas uma vai passar
+        if (auth()->check()) {
+            $user = auth()->user();
+            // Verifica novamente com lock para evitar race condition
+            $user->refresh();
+            if ($user->kwai_content_view_sent) {
+                return response()->json([
+                    'status' => 'ok',
+                    'message' => 'Content View já foi enviado anteriormente',
+                    'already_sent' => true,
+                ]);
+            }
+            // Marca como enviado antes de processar
+            $user->kwai_content_view_sent = true;
+            $user->save();
+        } else {
+            // Verifica novamente na session
+            if (session('kwai_content_view_sent', false)) {
+                return response()->json([
+                    'status' => 'ok',
+                    'message' => 'Content View já foi enviado anteriormente',
+                    'already_sent' => true,
+                ]);
+            }
+            // Marca como enviado antes de processar
+            session(['kwai_content_view_sent' => true]);
+        }
+
         // Em modo teste, usa testToken como fallback se não tiver click_id
         $clickId = $request->click_id ?? '';
         $page = $request->page ?? 'home';
@@ -457,20 +486,13 @@ Route::post('/api/kwai/track-content-view', function (Request $request) {
         );
 
         if ($result['success']) {
-            // Marca como enviado no banco de dados (se autenticado) ou na session
-            if (auth()->check()) {
-                $user = auth()->user();
-                $user->kwai_content_view_sent = true;
-                $user->save();
-            } else {
-                session(['kwai_content_view_sent' => true]);
-            }
-
             Log::info('Kwai Content View tracked', [
                 'click_id' => $clickId,
                 'user_id' => auth()->id(),
             ]);
         } else {
+            // Se falhar, desmarca para permitir nova tentativa (opcional)
+            // Mas por enquanto, mantém marcado para evitar múltiplas tentativas
             Log::warning('Kwai Content View failed', [
                 'click_id' => $clickId,
                 'error' => $result['error'] ?? 'Unknown error',

@@ -887,23 +887,8 @@ export default {
         };
         // Funções de toast já estão declaradas acima (linhas 478-502)
 
-        // Função para trackear Content View
-        const trackContentView = () => {
-            if (window.KwaiEventAPI && typeof window.KwaiEventAPI.trackContentView === 'function') {
-                // Passa a página atual para o tracking
-                window.KwaiEventAPI.trackContentView(currentPage.value);
-            }
-        };
-
-        // Watcher para trackear Content View quando a página muda
+        // Watcher para criar itens quando a página muda
         watch(currentPage, (newPage, oldPage) => {
-            if (newPage !== oldPage) {
-                // Aguarda um pouco para garantir que a página foi renderizada
-                setTimeout(() => {
-                    trackContentView();
-                }, 300);
-            }
-            
             // Cria os itens imediatamente quando a página do jogo é renderizada
             if (newPage === 'game') {
                 nextTick(() => {
@@ -916,10 +901,6 @@ export default {
         });
 
         onMounted(async () => {
-            // Trackear Content View na página inicial
-            setTimeout(() => {
-                trackContentView();
-            }, 1000);
 
             if (window.Notiflix) {
                 window.Notiflix.Notify.init({
